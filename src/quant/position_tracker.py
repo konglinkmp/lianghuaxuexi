@@ -10,7 +10,7 @@ from collections import defaultdict
 from typing import Optional, Tuple, List, Dict
 import pandas as pd
 
-from config import MAX_POSITIONS, MAX_SECTOR_POSITIONS, POSITION_FILE
+from config.config import MAX_POSITIONS, MAX_SECTOR_POSITIONS, POSITION_FILE
 
 
 class PositionTracker:
@@ -26,7 +26,14 @@ class PositionTracker:
     def __init__(self, filepath: str = POSITION_FILE):
         self.filepath = filepath
         self.positions: Dict[str, dict] = {}
+        self._ensure_directory()
         self._load()
+
+    def _ensure_directory(self):
+        """确保持仓文件所在目录存在"""
+        directory = os.path.dirname(self.filepath)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
     
     def _load(self):
         """从文件加载持仓记录"""
@@ -304,7 +311,7 @@ if __name__ == "__main__":
     # 测试
     print("=== 持仓跟踪器测试 ===")
     
-    tracker = PositionTracker("test_positions.json")
+    tracker = PositionTracker("data/test_positions.json")
     manager = PortfolioManager(tracker, max_positions=5, max_sector_positions=2)
     
     # 测试添加持仓
@@ -323,5 +330,5 @@ if __name__ == "__main__":
     print(f"能否买入贵州茅台(白酒): {can_buy} - {reason}")
     
     # 清理测试文件
-    if os.path.exists("test_positions.json"):
-        os.remove("test_positions.json")
+    if os.path.exists("data/test_positions.json"):
+        os.remove("data/test_positions.json")

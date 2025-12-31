@@ -38,7 +38,7 @@ NEW_STOCK_DAYS = 365  # 1年
 
 # ============ 输出配置 ============
 # CSV输出文件名
-OUTPUT_CSV = "trading_plan.csv"
+OUTPUT_CSV = "data/trading_plan.csv"
 
 # ============ 指数代码 ============
 # 沪深300指数代码
@@ -52,4 +52,4 @@ MAX_POSITIONS = 10
 MAX_SECTOR_POSITIONS = 3
 
 # 持仓记录文件
-POSITION_FILE = "positions.json"
+POSITION_FILE = "data/positions.json"

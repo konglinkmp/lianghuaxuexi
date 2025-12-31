@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "channels": {
     "dingtalk": {
       "enabled": false,
@@ -15,7 +15,7 @@
       "send_key": ""
     },
     "bark": {
-      "enabled": false,
+      "enabled": true,
       "server": "https://api.day.app",
       "device_key": ""
     }

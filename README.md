@@ -14,7 +14,7 @@ cd ~/workspace/量化
 source venv/bin/activate
 
 # 3. 运行主程序
-python main.py
+PYTHONPATH=src python -m quant.main
 ```
 
 ---
@@ -23,8 +23,8 @@ python main.py
 
 | 功能 | 说明 | 命令 |
 |------|------|------|
-| 生成交易计划 | 筛选明日可买入的股票 | `python main.py` |
-| 回测策略 | 验证策略历史表现 | `python backtester.py` |
+| 生成交易计划 | 筛选明日可买入的股票 | `PYTHONPATH=src python -m quant.main` |
+| 回测策略 | 验证策略历史表现 | `PYTHONPATH=src python -m quant.backtester` |
 | 单股回测 | 测试某只股票的策略效果 | 见下方示例 |
 | 持仓管理 | 记录和跟踪持仓 | 见下方示例 |
 | 可视化报告 | 生成回测图表 | 见下方示例 |
@@ -42,25 +42,25 @@ python main.py
 source venv/bin/activate
 
 # 运行主程序（默认分析2000只股票）
-python main.py
+PYTHONPATH=src python -m quant.main
 ```
 
 **输出结果：**
 - 终端显示符合条件的股票列表
-- 自动保存到 `trading_plan.csv` 文件
+- 自动保存到 `data/trading_plan.csv` 文件
 
 **查看结果：**
 ```bash
 # 用 Excel 或 Numbers 打开
-open trading_plan.csv
+open data/trading_plan.csv
 
 # 或用命令行查看
-cat trading_plan.csv
+cat data/trading_plan.csv
 ```
 
 #### 方法2：只分析我自选的股票
 
-1. **编辑 `myshare.txt`**，每行一个股票代码：
+1. **编辑 `data/myshare.txt`**，每行一个股票代码：
    ```
    000001
    600036
@@ -70,13 +70,13 @@ cat trading_plan.csv
 
 2. **运行程序**：
    ```bash
-   python main.py --custom
+   PYTHONPATH=src python -m quant.main --custom
    ```
 
 #### 方法3：快速测试（只分析前100只）
 
 ```bash
-python main.py --limit 100
+PYTHONPATH=src python -m quant.main --limit 100
 ```
 
 ---
@@ -88,8 +88,8 @@ python main.py --limit 100
 ```bash
 source venv/bin/activate
 
-python -c "
-from backtester import backtest_stock, BacktestResult, print_backtest_report
+PYTHONPATH=src python -c "
+from quant.backtester import backtest_stock, BacktestResult, print_backtest_report
 
 # 修改这里的股票代码和名称
 trades = backtest_stock('002352', '顺丰控股', use_trailing_stop=True)
@@ -118,8 +118,8 @@ else:
 ### 场景三：回测我的自选股
 
 ```bash
-# 确保 myshare.txt 中有你的股票代码
-python backtester.py
+# 确保 data/myshare.txt 中有你的股票代码
+PYTHONPATH=src python -m quant.backtester
 ```
 
 **输出：**
@@ -131,9 +131,9 @@ python backtester.py
 ### 场景四：生成可视化回测报告
 
 ```bash
-python -c "
-from backtester import backtest_stock
-from visualizer import plot_performance_report
+PYTHONPATH=src python -c "
+from quant.backtester import backtest_stock
+from quant.visualizer import plot_performance_report
 
 # 收集多只股票的交易数据
 trades = []
@@ -143,12 +143,12 @@ for code, name in stocks:
     trades += backtest_stock(code, name)
 
 # 生成可视化报告
-plot_performance_report(trades, 'my_report.png')
-print('报告已生成: my_report.png')
+plot_performance_report(trades, 'outputs/my_report.png')
+print('报告已生成: outputs/my_report.png')
 "
 
 # 打开报告图片
-open my_report.png
+open outputs/my_report.png
 ```
 
 ---
@@ -158,8 +158,8 @@ open my_report.png
 #### 添加持仓
 
 ```bash
-python -c "
-from position_tracker import position_tracker
+PYTHONPATH=src python -c "
+from quant.position_tracker import position_tracker
 
 # 添加持仓（代码、名称、买入价、股数、止损价、止盈价、行业）
 position_tracker.add_position(
@@ -180,8 +180,8 @@ position_tracker.print_positions()
 #### 查看所有持仓
 
 ```bash
-python -c "
-from position_tracker import position_tracker
+PYTHONPATH=src python -c "
+from quant.position_tracker import position_tracker
 position_tracker.print_positions()
 "
 ```
@@ -189,8 +189,8 @@ position_tracker.print_positions()
 #### 卖出股票
 
 ```bash
-python -c "
-from position_tracker import position_tracker
+PYTHONPATH=src python -c "
+from quant.position_tracker import position_tracker
 
 # 卖出（代码、卖出价、原因）
 trade = position_tracker.remove_position('002352', 48.50, '止盈')
@@ -204,8 +204,8 @@ if trade:
 ### 场景六：检查今天能不能交易（回撤控制）
 
 ```bash
-python -c "
-from drawdown_controller import drawdown_controller
+PYTHONPATH=src python -c "
+from quant.drawdown_controller import drawdown_controller
 
 # 更新当前资金（根据实际情况修改）
 can_trade, msg = drawdown_controller.update_capital(95000)
@@ -220,7 +220,7 @@ drawdown_controller.print_status()
 
 ### 场景七：配置消息推送（钉钉/微信）
 
-1. 编辑 `notification_config.json`
+1. 编辑 `config/notification_config.json`
 
 2. 示例（钉钉机器人）：
    ```json
@@ -238,8 +238,8 @@ drawdown_controller.print_status()
 
 3. 测试推送：
    ```bash
-   python -c "
-   from notifier import notification_manager
+   PYTHONPATH=src python -c "
+   from quant.notifier import notification_manager
    notification_manager.send_all('测试', '这是一条测试消息')
    "
    ```
@@ -248,7 +248,7 @@ drawdown_controller.print_status()
 
 ## ⚙️ 配置说明
 
-所有配置都在 `config.py` 文件中：
+所有配置都在 `config/config.py` 文件中：
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
@@ -269,22 +269,23 @@ drawdown_controller.print_status()
 
 | 文件 | 作用 |
 |------|------|
-| `main.py` | 主程序入口 |
-| `config.py` | 配置参数 |
-| `strategy.py` | 策略逻辑（买入信号、止损止盈） |
-| `data_fetcher.py` | 数据获取（AKShare） |
-| `stock_pool.py` | 股票池管理 |
-| `plan_generator.py` | 交易计划生成 |
-| `backtester.py` | 回测引擎 |
-| `transaction_cost.py` | 交易成本模型 |
-| `position_tracker.py` | 持仓跟踪 |
-| `drawdown_controller.py` | 回撤控制 |
-| `visualizer.py` | 可视化报告 |
-| `notifier.py` | 消息推送 |
-| `myshare.txt` | 自选股票池 |
-| `trading_plan.csv` | 生成的交易计划 |
-| `positions.json` | 持仓记录 |
-| `notification_config.json` | 推送配置 |
+| `src/quant/main.py` | 主程序入口 |
+| `config/config.py` | 配置参数 |
+| `src/quant/strategy.py` | 策略逻辑（买入信号、止损止盈） |
+| `src/quant/data_fetcher.py` | 数据获取（AKShare） |
+| `src/quant/stock_pool.py` | 股票池管理 |
+| `src/quant/plan_generator.py` | 交易计划生成 |
+| `src/quant/backtester.py` | 回测引擎 |
+| `src/quant/transaction_cost.py` | 交易成本模型 |
+| `src/quant/position_tracker.py` | 持仓跟踪 |
+| `src/quant/drawdown_controller.py` | 回撤控制 |
+| `src/quant/visualizer.py` | 可视化报告 |
+| `src/quant/notifier.py` | 消息推送 |
+| `data/myshare.txt` | 自选股票池 |
+| `data/trading_plan.csv` | 生成的交易计划 |
+| `data/positions.json` | 持仓记录 |
+| `config/notification_config.json` | 推送配置 |
+| `outputs/` | 图表/报告输出目录 |
 
 ---
 
@@ -300,10 +301,10 @@ source venv/bin/activate
 网络问题或数据源限制，稍后重试即可。
 
 ### Q: 如何修改止损止盈比例？
-编辑 `config.py` 中的 `STOP_LOSS_RATIO` 和 `TAKE_PROFIT_RATIO`。
+编辑 `config/config.py` 中的 `STOP_LOSS_RATIO` 和 `TAKE_PROFIT_RATIO`。
 
 ### Q: 如何添加新股票到自选池？
-编辑 `myshare.txt`，每行一个股票代码。
+编辑 `data/myshare.txt`，每行一个股票代码。
 
 ### Q: 回测的收益率为什么比预期低？
 系统已加入滑点（0.1%）、佣金（万三）、印花税（千一）的交易成本，更接近实际交易。
@@ -332,9 +333,9 @@ source venv/bin/activate
 ### 批量回测多只股票并导出
 
 ```bash
-python -c "
+PYTHONPATH=src python -c "
 import pandas as pd
-from backtester import backtest_stock
+from quant.backtester import backtest_stock
 
 stocks = ['000001', '600036', '002352', '601212', '000002']
 all_trades = []
@@ -345,8 +346,8 @@ for code in stocks:
 
 # 导出到CSV
 df = pd.DataFrame(all_trades)
-df.to_csv('all_trades.csv', index=False)
-print(f'共 {len(all_trades)} 笔交易，已保存到 all_trades.csv')
+df.to_csv('data/all_trades.csv', index=False)
+print(f'共 {len(all_trades)} 笔交易，已保存到 data/all_trades.csv')
 "
 ```
 
@@ -355,7 +356,7 @@ print(f'共 {len(all_trades)} 笔交易，已保存到 all_trades.csv')
 ```bash
 # 添加到 crontab（每天17:00运行）
 # crontab -e
-# 0 17 * * 1-5 cd ~/workspace/量化 && source venv/bin/activate && python main.py >> log.txt 2>&1
+# 0 17 * * 1-5 cd ~/workspace/量化 && source venv/bin/activate && PYTHONPATH=src python -m quant.main >> log.txt 2>&1
 ```
 
 ---

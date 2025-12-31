@@ -6,8 +6,8 @@
 import os
 import pandas as pd
 from datetime import datetime, timedelta
-from data_fetcher import get_all_a_stock_list, get_stock_info
-from config import NEW_STOCK_DAYS
+from .data_fetcher import get_all_a_stock_list, get_stock_info
+from config.config import NEW_STOCK_DAYS
 
 
 def filter_st_stocks(df: pd.DataFrame) -> pd.DataFrame:
@@ -77,7 +77,7 @@ def filter_new_stocks(df: pd.DataFrame, min_days: int = NEW_STOCK_DAYS) -> pd.Da
     return df[df['代码'].isin(valid_stocks)].copy()
 
 
-def load_custom_pool(filepath: str = "myshare.txt") -> list:
+def load_custom_pool(filepath: str = "data/myshare.txt") -> list:
     """
     加载自定义股票池文件
     
@@ -112,7 +112,7 @@ def load_custom_pool(filepath: str = "myshare.txt") -> list:
     return stocks
 
 
-def get_final_pool(use_custom: bool = False, custom_file: str = "myshare.txt", 
+def get_final_pool(use_custom: bool = False, custom_file: str = "data/myshare.txt", 
                    skip_new_stock_filter: bool = True) -> pd.DataFrame:
     """
     获取最终的待分析股票池

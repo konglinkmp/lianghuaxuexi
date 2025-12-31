@@ -12,7 +12,7 @@ import ssl
 import urllib3
 from datetime import datetime, timedelta
 from functools import wraps
-from config import HISTORY_DAYS, HS300_CODE
+from config.config import HISTORY_DAYS, HS300_CODE
 
 # 禁用 SSL 警告和验证（解决网络连接问题）
 warnings.filterwarnings('ignore', category=urllib3.exceptions.InsecureRequestWarning)

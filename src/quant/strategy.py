@@ -4,8 +4,8 @@
 """
 
 import pandas as pd
-from data_fetcher import get_index_daily_history
-from config import (
+from .data_fetcher import get_index_daily_history
+from config.config import (
     MA_SHORT, MA_LONG, 
     VOLUME_RATIO_THRESHOLD,
     STOP_LOSS_RATIO, TAKE_PROFIT_RATIO,
@@ -287,7 +287,7 @@ def get_latest_ma20(df: pd.DataFrame) -> float:
 
 if __name__ == "__main__":
     # 测试策略
-    from data_fetcher import get_stock_daily_history
+    from .data_fetcher import get_stock_daily_history
     
     print("测试大盘风险检查...")
     is_risky, msg = check_market_risk()

@@ -7,18 +7,18 @@ A股量化交易决策辅助工具 - 主程序入口
 3. 生成并输出"明日操作清单"
 
 使用方法：
-    python main.py                    # 使用全A股（剔除ST）
-    python main.py --custom           # 使用自定义股票池 myshare.txt
-    python main.py --custom --file pool.txt  # 指定自定义股票池文件
+    PYTHONPATH=src python -m quant.main                    # 使用全A股（剔除ST）
+    PYTHONPATH=src python -m quant.main --custom           # 使用自定义股票池 data/myshare.txt
+    PYTHONPATH=src python -m quant.main --custom --file data/pool.txt  # 指定自定义股票池文件
 """
 
 import argparse
 import os
 from datetime import datetime
-from stock_pool import get_final_pool
-from strategy import check_market_risk
-from plan_generator import generate_trading_plan, print_trading_plan, save_trading_plan
-from config import TOTAL_CAPITAL
+from .stock_pool import get_final_pool
+from .strategy import check_market_risk
+from .plan_generator import generate_trading_plan, print_trading_plan, save_trading_plan
+from config.config import TOTAL_CAPITAL
 
 
 def print_header():
@@ -35,8 +35,8 @@ def main():
     parser = argparse.ArgumentParser(description='A股量化交易决策辅助工具')
     parser.add_argument('--custom', action='store_true', 
                         help='使用自定义股票池')
-    parser.add_argument('--file', type=str, default='myshare.txt',
-                        help='自定义股票池文件路径（默认: myshare.txt）')
+    parser.add_argument('--file', type=str, default='data/myshare.txt',
+                        help='自定义股票池文件路径（默认: data/myshare.txt）')
     parser.add_argument('--limit', type=int, default=0,
                         help='限制分析股票数量（0表示不限制，用于测试）')
     parser.add_argument('--skip-risk-check', action='store_true',

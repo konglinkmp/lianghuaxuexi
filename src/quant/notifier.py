@@ -17,7 +17,7 @@ import urllib.parse
 class NotificationConfig:
     """通知配置"""
     
-    def __init__(self, config_file: str = "notification_config.json"):
+    def __init__(self, config_file: str = "config/notification_config.json"):
         self.config_file = config_file
         self.config = self._load_config()
     
@@ -243,7 +243,7 @@ class BarkNotifier:
 class NotificationManager:
     """通知管理器"""
     
-    def __init__(self, config_file: str = "notification_config.json"):
+    def __init__(self, config_file: str = "config/notification_config.json"):
         self.config = NotificationConfig(config_file)
         self.notifiers = self._init_notifiers()
     
@@ -374,7 +374,7 @@ if __name__ == "__main__":
     
     if not manager.notifiers:
         print("\n[提示] 未配置任何通知渠道")
-        print("请编辑 notification_config.json 文件：")
+        print("请编辑 config/notification_config.json 文件：")
         print("1. 将 'enabled' 设为 true")
         print("2. 配置至少一个推送渠道（钉钉/企业微信/Server酱/Bark）")
     else:

@@ -74,7 +74,7 @@ def generate_monthly_returns(trades: list) -> pd.DataFrame:
 
 
 def plot_performance_report(trades: list, 
-                            output_path: str = "backtest_report.png",
+                            output_path: str = "outputs/backtest_report.png",
                             initial_capital: float = 100000) -> str:
     """
     生成可视化回测报告
@@ -90,6 +90,10 @@ def plot_performance_report(trades: list,
     if not trades:
         print("[警告] 无交易记录，无法生成报告")
         return ""
+
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
     
     df = pd.DataFrame(trades)
     df['exit_date'] = pd.to_datetime(df['exit_date'])
@@ -201,7 +205,7 @@ def plot_performance_report(trades: list,
     return output_path
 
 
-def plot_drawdown_curve(trades: list, output_path: str = "drawdown.png") -> str:
+def plot_drawdown_curve(trades: list, output_path: str = "outputs/drawdown.png") -> str:
     """
     绘制回撤曲线
     
@@ -214,6 +218,10 @@ def plot_drawdown_curve(trades: list, output_path: str = "drawdown.png") -> str:
     """
     if not trades:
         return ""
+
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
     
     df = pd.DataFrame(trades)
     df['exit_date'] = pd.to_datetime(df['exit_date'])
@@ -245,7 +253,7 @@ def plot_drawdown_curve(trades: list, output_path: str = "drawdown.png") -> str:
 
 if __name__ == "__main__":
     # 测试数据
-    from backtester import backtest_stock
+    from .backtester import backtest_stock
     
     print("测试可视化模块...")
     
@@ -255,7 +263,7 @@ if __name__ == "__main__":
     
     if trades:
         print(f"共 {len(trades)} 笔交易")
-        plot_performance_report(trades, "test_report.png")
-        plot_drawdown_curve(trades, "test_drawdown.png")
+        plot_performance_report(trades, "outputs/test_report.png")
+        plot_drawdown_curve(trades, "outputs/test_drawdown.png")
     else:
         print("无交易数据")

@@ -6,8 +6,8 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from data_fetcher import get_stock_daily_history
-from strategy import (
+from .data_fetcher import get_stock_daily_history
+from .strategy import (
     check_buy_signal,
     calculate_stop_loss,
     calculate_take_profit,
@@ -15,8 +15,8 @@ from strategy import (
     calculate_ma,
     calculate_atr
 )
-from config import MA_SHORT, TRAILING_STOP_RATIO
-from transaction_cost import TransactionCostModel, default_cost_model
+from config.config import MA_SHORT, TRAILING_STOP_RATIO
+from .transaction_cost import TransactionCostModel, default_cost_model
 
 
 class BacktestResult:
@@ -267,12 +267,13 @@ def print_backtest_report(result: BacktestResult):
 
 
 if __name__ == "__main__":
-    from stock_pool import load_custom_pool, get_all_a_stock_list
+    from .stock_pool import load_custom_pool
+    from .data_fetcher import get_all_a_stock_list
     
     print("🚀 启动回测引擎...")
     
     # 加载自定义股票池
-    custom_codes = load_custom_pool("myshare.txt")
+    custom_codes = load_custom_pool("data/myshare.txt")
     
     if custom_codes:
         print(f"[信息] 使用自定义股票池: {custom_codes}")

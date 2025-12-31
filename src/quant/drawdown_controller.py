@@ -22,10 +22,12 @@ class DrawdownController:
     def __init__(self, 
                  max_drawdown: float = 0.15,  # 最大回撤阈值15%
                  initial_capital: float = 100000,
-                 state_file: str = "drawdown_state.json"):
+                 state_file: str = "data/drawdown_state.json"):
         self.max_drawdown = max_drawdown
         self.initial_capital = initial_capital
         self.state_file = state_file
+
+        self._ensure_directory()
         
         # 从文件加载状态
         self._load_state()
@@ -49,6 +51,12 @@ class DrawdownController:
         self.current_capital = self.initial_capital
         self.is_paused = False
         self.pause_reason = ''
+
+    def _ensure_directory(self):
+        """确保存储目录存在"""
+        directory = os.path.dirname(self.state_file)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
     
     def _save_state(self):
         """保存状态"""
@@ -177,7 +185,7 @@ if __name__ == "__main__":
     controller = DrawdownController(
         max_drawdown=0.15,
         initial_capital=100000,
-        state_file="test_drawdown.json"
+        state_file="data/test_drawdown.json"
     )
     
     # 模拟资金变化
@@ -204,5 +212,5 @@ if __name__ == "__main__":
     print(f"\n能否交易: {reason}")
     
     # 清理测试文件
-    if os.path.exists("test_drawdown.json"):
-        os.remove("test_drawdown.json")
+    if os.path.exists("data/test_drawdown.json"):
+        os.remove("data/test_drawdown.json")

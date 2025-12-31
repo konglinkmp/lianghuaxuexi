@@ -3,17 +3,18 @@
 遍历股票池，生成"明日操作清单"
 """
 
+import os
 import pandas as pd
 from datetime import datetime
-from data_fetcher import get_stock_daily_history
-from strategy import (
+from .data_fetcher import get_stock_daily_history
+from .strategy import (
     check_buy_signal, 
     calculate_stop_loss, 
     calculate_take_profit,
     get_latest_ma20
 )
-from config import POSITION_RATIO, TOTAL_CAPITAL, OUTPUT_CSV, MAX_POSITIONS
-from position_tracker import position_tracker, portfolio_manager
+from config.config import POSITION_RATIO, TOTAL_CAPITAL, OUTPUT_CSV, MAX_POSITIONS
+from .position_tracker import position_tracker, portfolio_manager
 
 
 def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
@@ -164,6 +165,9 @@ def save_trading_plan(plan_df: pd.DataFrame, filepath: str = OUTPUT_CSV):
         return
     
     try:
+        output_dir = os.path.dirname(filepath)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
         plan_df.to_csv(filepath, index=False, encoding='utf-8-sig')
         print(f"\n[信息] 交易计划已保存至: {filepath}")
     except Exception as e:
@@ -172,7 +176,7 @@ def save_trading_plan(plan_df: pd.DataFrame, filepath: str = OUTPUT_CSV):
 
 if __name__ == "__main__":
     # 简单测试
-    from stock_pool import get_final_pool
+    from .stock_pool import get_final_pool
     
     print("测试交易计划生成器...")
     

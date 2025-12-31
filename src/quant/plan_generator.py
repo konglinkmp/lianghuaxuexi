@@ -6,7 +6,7 @@
 import os
 import pandas as pd
 from datetime import datetime
-from .data_fetcher import get_stock_daily_history
+from .data_fetcher import get_stock_daily_history, get_stock_industry
 from .strategy import (
     check_buy_signal,
     calculate_stop_loss,
@@ -98,9 +98,13 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
             if suggested_shares < 100:
                 suggested_shares = 100
             
+            # 获取板块信息
+            industry = get_stock_industry(code)
+            
             plans.append({
                 '代码': code,
                 '名称': name,
+                '板块': industry or '未知',
                 '收盘价': round(close_price, 2),
                 '建议买入价': round(close_price, 2),  # 以收盘价作为参考
                 '止损价': round(stop_loss, 2),
@@ -153,7 +157,8 @@ def print_trading_plan(plan_df: pd.DataFrame, market_status: str = ""):
     
     # 格式化打印
     for idx, row in plan_df.iterrows():
-        print(f"\n【{idx + 1}】{row['名称']} ({row['代码']})")
+        industry = row.get('板块', '未知')
+        print(f"\n【{idx + 1}】{row['名称']} ({row['代码']}) - 📌{industry}")
         print(f"    收盘价: ¥{row['收盘价']:.2f}")
         print(f"    建议买入价: ¥{row['建议买入价']:.2f}")
         print(f"    止损价: ¥{row['止损价']:.2f} (跌破即卖出)")

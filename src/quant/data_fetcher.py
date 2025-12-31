@@ -165,6 +165,47 @@ def get_index_daily_history(index_code: str = HS300_CODE, days: int = HISTORY_DA
     return df
 
 
+# 行业信息缓存
+_industry_cache = {}
+
+
+@retry(max_attempts=2, delay=0.5)
+def get_stock_industry(symbol: str) -> str:
+    """
+    获取股票所属行业/板块
+    
+    Args:
+        symbol: 股票代码
+        
+    Returns:
+        str: 所属行业名称，获取失败返回空字符串
+    """
+    global _industry_cache
+    
+    # 检查缓存
+    if symbol in _industry_cache:
+        return _industry_cache[symbol]
+    
+    try:
+        df = ak.stock_individual_info_em(symbol=symbol)
+        if df.empty:
+            _industry_cache[symbol] = ""
+            return ""
+        
+        # 查找行业信息
+        for _, row in df.iterrows():
+            if row['item'] == '行业':
+                industry = str(row['value'])
+                _industry_cache[symbol] = industry
+                return industry
+        
+        _industry_cache[symbol] = ""
+        return ""
+    except Exception:
+        _industry_cache[symbol] = ""
+        return ""
+
+
 @retry(max_attempts=2, delay=0.5)
 def get_stock_info(symbol: str) -> dict:
     """

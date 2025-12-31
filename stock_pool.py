@@ -25,6 +25,21 @@ def filter_st_stocks(df: pd.DataFrame) -> pd.DataFrame:
     return df[mask].copy()
 
 
+def filter_special_sectors(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    剔除创业板（300开头）和科创板（688开头）股票
+    
+    Args:
+        df: 包含 '代码' 列的DataFrame
+        
+    Returns:
+        过滤后的DataFrame
+    """
+    # 创业板代码以300或301开头，科创板代码以688开头
+    mask = ~df['代码'].str.startswith(('300', '301', '688'), na=False)
+    return df[mask].copy()
+
+
 def filter_new_stocks(df: pd.DataFrame, min_days: int = NEW_STOCK_DAYS) -> pd.DataFrame:
     """
     剔除上市不满指定天数的新股
@@ -130,6 +145,10 @@ def get_final_pool(use_custom: bool = False, custom_file: str = "myshare.txt",
             df = filter_st_stocks(df)
             print(f"[信息] 剔除ST后剩余 {len(df)} 只股票")
             
+            # 剔除创业板和科创板
+            df = filter_special_sectors(df)
+            print(f"[信息] 剔除创业板/科创板后剩余 {len(df)} 只股票")
+            
             return df.reset_index(drop=True)
     
     if not use_custom:
@@ -146,6 +165,10 @@ def get_final_pool(use_custom: bool = False, custom_file: str = "myshare.txt",
         # 剔除ST
         df = filter_st_stocks(all_stocks)
         print(f"[信息] 剔除ST后剩余 {len(df)} 只股票")
+        
+        # 剔除创业板和科创板
+        df = filter_special_sectors(df)
+        print(f"[信息] 剔除创业板/科创板后剩余 {len(df)} 只股票")
         
         # 剔除新股（可选，因为需要逐个查询，较慢）
         if not skip_new_stock_filter:

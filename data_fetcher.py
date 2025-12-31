@@ -7,9 +7,17 @@ import akshare as ak
 import pandas as pd
 import logging
 import time
+import warnings
+import ssl
+import urllib3
 from datetime import datetime, timedelta
 from functools import wraps
 from config import HISTORY_DAYS, HS300_CODE
+
+# 禁用 SSL 警告和验证（解决网络连接问题）
+warnings.filterwarnings('ignore', category=urllib3.exceptions.InsecureRequestWarning)
+warnings.filterwarnings('ignore', message='Unverified HTTPS request')
+ssl._create_default_https_context = ssl._create_unverified_context
 
 # 配置日志
 logging.basicConfig(
@@ -80,8 +88,8 @@ def get_stock_daily_history(symbol: str, days: int = HISTORY_DAYS) -> pd.DataFra
     Returns:
         DataFrame: 包含 日期、开盘、收盘、最高、最低、成交量 等字段
     """
-    # 计算起止日期
-    end_date = datetime.now().strftime('%Y%m%d')
+    # 计算起止日期（使用昨天作为结束日期，避免边界问题）
+    end_date = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
     start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
     
     # 使用东方财富接口获取历史数据

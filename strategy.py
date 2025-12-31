@@ -27,13 +27,136 @@ def calculate_ma(df: pd.DataFrame, period: int) -> pd.Series:
     return df['close'].rolling(window=period).mean()
 
 
+def calculate_atr(df: pd.DataFrame, period: int = 14) -> float:
+    """
+    计算ATR（平均真实波幅）
+    
+    Args:
+        df: 包含 high, low, close 的DataFrame
+        period: ATR周期，默认14日
+        
+    Returns:
+        最新的ATR值
+    """
+    if len(df) < period + 1:
+        return 0.0
+    
+    df = df.copy()
+    # 计算真实波幅的三个分量
+    high_low = df['high'] - df['low']
+    high_close = abs(df['high'] - df['close'].shift(1))
+    low_close = abs(df['low'] - df['close'].shift(1))
+    
+    # 真实波幅 = 三者中的最大值
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    
+    # ATR = TR的移动平均
+    atr = tr.rolling(window=period).mean()
+    
+    return atr.iloc[-1] if not pd.isna(atr.iloc[-1]) else 0.0
+
+
+class MultiStrategyValidator:
+    """
+    复合策略验证器
+    
+    至少需要2个策略同时触发才发出买入信号，以提高胜率
+    """
+    
+    def __init__(self, required_votes: int = 2):
+        self.required_votes = required_votes
+    
+    def validate(self, df: pd.DataFrame) -> tuple:
+        """
+        验证是否满足买入条件
+        
+        Returns:
+            tuple: (是否买入, 触发的策略列表)
+        """
+        if df.empty or len(df) < MA_SHORT + 1:
+            return False, []
+        
+        df = df.copy()
+        df['ma20'] = calculate_ma(df, MA_SHORT)
+        
+        triggered_strategies = []
+        
+        # 策略1: 原动能趋势（站上MA20 + 放量）
+        if self._momentum_trend(df):
+            triggered_strategies.append("动能趋势")
+        
+        # 策略2: 突破回踩确认
+        if self._breakout_confirmation(df):
+            triggered_strategies.append("突破确认")
+        
+        # 策略3: 排除量价背离（作为过滤条件）
+        if self._no_volume_price_divergence(df):
+            triggered_strategies.append("量价健康")
+        
+        # 判断是否达到所需票数
+        is_valid = len(triggered_strategies) >= self.required_votes
+        
+        return is_valid, triggered_strategies
+    
+    def _momentum_trend(self, df: pd.DataFrame) -> bool:
+        """原动能趋势策略：站上MA20 + 成交量放大"""
+        latest = df.iloc[-1]
+        prev = df.iloc[-2]
+        
+        # 收盘价站上20日均线
+        price_above_ma = latest['close'] > latest['ma20']
+        
+        # 成交量较前日放大1.2倍以上
+        volume_increase = latest['volume'] > prev['volume'] * VOLUME_RATIO_THRESHOLD
+        
+        # 价格未过分远离均线（防止追高）
+        price_not_too_high = latest['close'] <= latest['ma20'] * (1 + MAX_PRICE_DEVIATION)
+        
+        return price_above_ma and volume_increase and price_not_too_high
+    
+    def _breakout_confirmation(self, df: pd.DataFrame) -> bool:
+        """突破回踩确认策略：价格突破后回踩不破"""
+        if len(df) < 5:
+            return False
+        
+        recent = df.tail(5)
+        ma20 = recent['ma20'].iloc[-1]
+        
+        # 检查前4日是否都在MA20之上
+        prev_4_above = all(recent['close'].iloc[:-1] > recent['ma20'].iloc[:-1])
+        
+        # 最新一日回踩但未跌破（允许1%的容差）
+        latest_above = recent['close'].iloc[-1] > ma20 * 0.99
+        
+        return prev_4_above and latest_above
+    
+    def _no_volume_price_divergence(self, df: pd.DataFrame) -> bool:
+        """排除量价背离：价涨量缩时不买入"""
+        latest = df.iloc[-1]
+        prev = df.iloc[-2]
+        
+        price_up = latest['close'] > prev['close']
+        volume_down = latest['volume'] < prev['volume'] * 0.9
+        
+        # 如果价涨量缩，返回False（存在背离）
+        if price_up and volume_down:
+            return False
+        
+        return True
+
+
+# 创建全局验证器实例
+strategy_validator = MultiStrategyValidator(required_votes=2)
+
+
 def check_buy_signal(df: pd.DataFrame) -> bool:
     """
-    判断是否满足买入条件
+    判断是否满足买入条件（使用复合策略验证）
     
     买入条件：
     1. 收盘价站上 20 日均线
     2. 成交量较前一日放大 1.2 倍以上
+    3. 至少2个策略同时触发
     
     Args:
         df: 历史K线数据DataFrame
@@ -41,49 +164,45 @@ def check_buy_signal(df: pd.DataFrame) -> bool:
     Returns:
         bool: 是否触发买入信号
     """
-    if df.empty or len(df) < MA_SHORT + 1:
-        return False
-    
-    # 计算20日均线
-    df = df.copy()
-    df['ma20'] = calculate_ma(df, MA_SHORT)
-    
-    # 获取最新数据
-    latest = df.iloc[-1]
-    prev = df.iloc[-2]
-    
-    # 条件1: 收盘价站上20日均线
-    price_above_ma = latest['close'] > latest['ma20']
-    
-    # 条件2: 成交量较前日放大1.2倍以上
-    volume_increase = latest['volume'] > prev['volume'] * VOLUME_RATIO_THRESHOLD
-    
-    # 条件3: 价格未过分远离均线（防止追高）
-    price_not_too_high = latest['close'] <= latest['ma20'] * (1 + MAX_PRICE_DEVIATION)
-    
-    return price_above_ma and volume_increase and price_not_too_high
+    is_valid, strategies = strategy_validator.validate(df)
+    return is_valid
 
 
-def calculate_stop_loss(buy_price: float, ma20: float) -> float:
+def calculate_stop_loss(buy_price: float, ma20: float, df: pd.DataFrame = None, 
+                        atr_multiplier: float = 1.5) -> float:
     """
-    计算止损价
+    计算止损价（支持ATR波动率自适应）
     
-    止损逻辑：买入价跌破5%或跌破20日均线，取较高者
+    止损逻辑：
+    1. ATR止损 = 买入价 - N倍ATR（如提供df）
+    2. 固定止损 = 买入价 * 0.95
+    3. 均线止损 = MA20 * 0.99
+    取三者中的较高值（更严格的止损）
     
     Args:
         buy_price: 买入价格
         ma20: 20日均线价格
+        df: 历史数据（用于计算ATR，可选）
+        atr_multiplier: ATR倍数，默认1.5
         
     Returns:
         止损触发价
     """
-    # 固定止损价
+    # 固定止损价（5%）
     fixed_stop = buy_price * (1 - STOP_LOSS_RATIO)
     
     # 均线止损价（略低于均线，给予一定容差）
     ma_stop = ma20 * 0.99
     
-    # 取较高者作为止损价（更严格的止损）
+    # ATR波动率止损（如果提供了历史数据）
+    if df is not None and not df.empty:
+        atr = calculate_atr(df)
+        if atr > 0:
+            atr_stop = buy_price - atr_multiplier * atr
+            # 取三者中的较高值
+            return max(fixed_stop, ma_stop, atr_stop)
+    
+    # 未提供df时，取固定止损和均线止损的较高者
     return max(fixed_stop, ma_stop)
 
 

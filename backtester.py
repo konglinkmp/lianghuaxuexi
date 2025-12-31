@@ -12,9 +12,11 @@ from strategy import (
     calculate_stop_loss,
     calculate_take_profit,
     get_latest_ma20,
-    calculate_ma
+    calculate_ma,
+    calculate_atr
 )
 from config import MA_SHORT, TRAILING_STOP_RATIO
+from transaction_cost import TransactionCostModel, default_cost_model
 
 
 class BacktestResult:
@@ -77,7 +79,8 @@ class BacktestResult:
         }
 
 
-def backtest_stock(symbol: str, name: str = "", use_trailing_stop: bool = True) -> list:
+def backtest_stock(symbol: str, name: str = "", use_trailing_stop: bool = True,
+                   use_cost_model: bool = True, shares: int = 1000) -> list:
     """
     对单只股票进行回测
     
@@ -85,11 +88,14 @@ def backtest_stock(symbol: str, name: str = "", use_trailing_stop: bool = True) 
         symbol: 股票代码
         name: 股票名称
         use_trailing_stop: 是否使用移动止盈
+        use_cost_model: 是否应用交易成本模型
+        shares: 模拟交易股数
         
     Returns:
         list: 交易记录列表
     """
     trades = []
+    cost_model = default_cost_model if use_cost_model else None
     
     # 获取历史数据（获取更长的数据用于回测）
     df = get_stock_daily_history(symbol, days=365)
@@ -126,7 +132,9 @@ def backtest_stock(symbol: str, name: str = "", use_trailing_stop: bool = True) 
                 in_position = True
                 entry_price = current_price
                 entry_date = current_date
-                stop_loss = calculate_stop_loss(entry_price, current['ma20'])
+                # 使用ATR动态止损（传入当前为止的历史数据）
+                historical_df = df.iloc[:i+1]
+                stop_loss = calculate_stop_loss(entry_price, current['ma20'], historical_df)
                 take_profit = calculate_take_profit(entry_price)
                 highest_since_entry = entry_price
                 
@@ -158,8 +166,21 @@ def backtest_stock(symbol: str, name: str = "", use_trailing_stop: bool = True) 
             
             if exit_reason:
                 # 记录交易
-                pnl = exit_price - entry_price
-                pnl_pct = pnl / entry_price
+                gross_pnl = exit_price - entry_price
+                gross_pnl_pct = gross_pnl / entry_price
+                
+                # 应用交易成本模型
+                if cost_model:
+                    cost_result = cost_model.calculate_round_trip_cost(
+                        entry_price, exit_price, shares
+                    )
+                    actual_pnl = cost_result['actual_profit'] / shares  # 每股实际盈亏
+                    actual_pnl_pct = cost_result['actual_return_pct'] / 100
+                    total_cost = cost_result['total_cost'] / shares  # 每股成本
+                else:
+                    actual_pnl = gross_pnl
+                    actual_pnl_pct = gross_pnl_pct
+                    total_cost = 0
                 
                 trades.append({
                     'symbol': symbol,
@@ -169,8 +190,11 @@ def backtest_stock(symbol: str, name: str = "", use_trailing_stop: bool = True) 
                     'exit_date': current_date,
                     'exit_price': round(exit_price, 2),
                     'exit_reason': exit_reason,
-                    'pnl': round(pnl, 2),
-                    'pnl_pct': round(pnl_pct, 4),
+                    'pnl': round(actual_pnl, 4),  # 使用实际盈亏
+                    'pnl_pct': round(actual_pnl_pct, 4),
+                    'gross_pnl': round(gross_pnl, 2),  # 毛利润
+                    'gross_pnl_pct': round(gross_pnl_pct, 4),
+                    'cost_per_share': round(total_cost, 4),  # 每股成本
                     'holding_days': (current_date - entry_date).days
                 })
                 

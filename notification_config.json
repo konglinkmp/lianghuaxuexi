@@ -1,0 +1,23 @@
+{
+  "enabled": false,
+  "channels": {
+    "dingtalk": {
+      "enabled": false,
+      "webhook": "",
+      "secret": ""
+    },
+    "wecom": {
+      "enabled": false,
+      "webhook": ""
+    },
+    "server_chan": {
+      "enabled": false,
+      "send_key": ""
+    },
+    "bark": {
+      "enabled": false,
+      "server": "https://api.day.app",
+      "device_key": ""
+    }
+  }
+}

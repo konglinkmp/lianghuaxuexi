@@ -12,22 +12,32 @@ from strategy import (
     calculate_take_profit,
     get_latest_ma20
 )
-from config import POSITION_RATIO, TOTAL_CAPITAL, OUTPUT_CSV
+from config import POSITION_RATIO, TOTAL_CAPITAL, OUTPUT_CSV, MAX_POSITIONS
+from position_tracker import position_tracker, portfolio_manager
 
 
-def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True) -> pd.DataFrame:
+def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
+                          use_position_limit: bool = True) -> pd.DataFrame:
     """
     生成交易计划
     
     Args:
         stock_pool: 股票池DataFrame，包含 代码、名称
         verbose: 是否打印进度
+        use_position_limit: 是否应用持仓数量限制
         
     Returns:
         DataFrame: 交易计划列表
     """
     plans = []
     total = len(stock_pool)
+    
+    # 获取当前持仓数量
+    current_positions = position_tracker.get_position_count()
+    remaining_slots = MAX_POSITIONS - current_positions
+    
+    if verbose and use_position_limit:
+        print(f"[持仓] 当前持仓 {current_positions}/{MAX_POSITIONS}，还可买入 {remaining_slots} 只")
     
     for idx, row in stock_pool.iterrows():
         code = row['代码']
@@ -36,6 +46,12 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True) -> pd.
         if verbose and (idx + 1) % 50 == 0:
             progress = (idx + 1) / total * 100
             print(f"[进度] 已分析 {idx + 1}/{total} 只股票 ({progress:.1f}%)...")
+        
+        # 检查是否还能继续推荐
+        if use_position_limit and len(plans) >= remaining_slots:
+            if verbose:
+                print(f"[限制] 已达可推荐上限({remaining_slots}只)，停止分析")
+            break
         
         try:
             # 获取历史数据
@@ -48,6 +64,12 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True) -> pd.
             if not check_buy_signal(df):
                 continue
             
+            # 检查是否已持有
+            if use_position_limit and position_tracker.get_position(code):
+                if verbose:
+                    print(f"[跳过] {name}({code}) 已在持仓中")
+                continue
+            
             # 获取最新数据
             latest = df.iloc[-1]
             close_price = latest['close']
@@ -55,8 +77,8 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True) -> pd.
             # 计算MA20
             ma20 = get_latest_ma20(df)
             
-            # 计算止损止盈
-            stop_loss = calculate_stop_loss(close_price, ma20)
+            # 计算止损止盈（使用ATR动态止损）
+            stop_loss = calculate_stop_loss(close_price, ma20, df)
             take_profit = calculate_take_profit(close_price)
             
             # 计算建议仓位金额
@@ -112,6 +134,10 @@ def print_trading_plan(plan_df: pd.DataFrame, market_status: str = ""):
     print("\n" + "=" * 80)
     print(f"📋 明日操作清单（生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}）")
     print(f"📊 共筛选出 {len(plan_df)} 只股票符合买入条件")
+    
+    # 显示当前持仓状态
+    current_positions = position_tracker.get_position_count()
+    print(f"💼 当前持仓: {current_positions}/{MAX_POSITIONS}")
     print("=" * 80)
     
     # 格式化打印

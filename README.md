@@ -1,94 +1,369 @@
-# A股量化交易决策辅助工具
+# 📈 A股量化交易决策辅助工具
 
-## 📌 项目背景
-本项目是一个基于 Python 的量化辅助系统，旨在收盘后分析 A 股数据，根据预设策略输出具体的交易计划（包括股票代码、买入建议、止损价、止盈价）。用户可根据此计划手动在券商 App 上挂条件单，以规避情绪化交易。
+一个基于 Python 的 A 股量化交易决策辅助系统，帮助你筛选股票、生成交易计划、回测策略效果。
 
-## 🚀 核心功能
-- **数据抓取**：使用开源库 `AKShare` 获取 A 股历史行情及指数数据。
-- **选股过滤**：自动获取全 A 股列表，剔除 ST 股、退市股及上市不满 1 年的新股。
-- **自定义池**：支持通过 `myshare.txt` 导入自定义关注的股票池。
-- **量化策略**：内置经典“动能+趋势”策略，并增加“防追高”过滤。
-- **回测引擎**：新增回测模块，支持计算胜率、盈亏比、最大回撤等核心指标。
-- **计划生成**：自动计算建议买入价、止损价、止盈价及建议仓位。
-- **风险控制**：大盘环境监控，当沪深 300 指数跌破 60 日均线时提示风险并停止买入。
-- **稳定性增强**：数据获取增加自动重试机制与详细日志记录。
+---
 
-## 📂 项目结构
-```text
-量化/
-├── main.py              # 主程序入口，负责流程调度
-├── backtester.py        # 回测引擎，验证策略历史表现
-├── config.py            # 配置文件，包含策略参数和资金管理
-├── data_fetcher.py      # 数据获取模块，封装 AKShare 接口
-├── stock_pool.py        # 选股池管理，负责股票过滤逻辑
-├── strategy.py          # 策略模块，实现买入/止损/止盈逻辑
-├── plan_generator.py    # 计划生成模块，输出操作清单
-├── myshare.txt          # 自定义股票池配置文件
-├── requirements.txt     # 项目依赖列表
-└── README.md            # 项目说明文档
-```
+## 🚀 快速开始
 
-## 🛠 安装与使用
-
-### 1. 安装依赖
-推荐使用 Python 3.9+ 环境：
 ```bash
-pip3 install -r requirements.txt
+# 1. 进入项目目录
+cd ~/workspace/量化
+
+# 2. 激活虚拟环境
+source venv/bin/activate
+
+# 3. 运行主程序
+python main.py
 ```
 
-### 2. 运行程序
-**分析全 A 股（默认模式）：**
+---
+
+## 📋 功能一览
+
+| 功能 | 说明 | 命令 |
+|------|------|------|
+| 生成交易计划 | 筛选明日可买入的股票 | `python main.py` |
+| 回测策略 | 验证策略历史表现 | `python backtester.py` |
+| 单股回测 | 测试某只股票的策略效果 | 见下方示例 |
+| 持仓管理 | 记录和跟踪持仓 | 见下方示例 |
+| 可视化报告 | 生成回测图表 | 见下方示例 |
+
+---
+
+## 🎯 使用场景
+
+### 场景一：明天我应该买什么股票？
+
+#### 方法1：全A股扫描（推荐新手）
+
 ```bash
-python3 main.py
+# 激活环境
+source venv/bin/activate
+
+# 运行主程序（默认分析2000只股票）
+python main.py
 ```
 
-**运行策略回测：**
+**输出结果：**
+- 终端显示符合条件的股票列表
+- 自动保存到 `trading_plan.csv` 文件
+
+**查看结果：**
 ```bash
-python3 backtester.py
+# 用 Excel 或 Numbers 打开
+open trading_plan.csv
+
+# 或用命令行查看
+cat trading_plan.csv
 ```
 
-**使用自定义股票池：**
-1. 在 `myshare.txt` 中输入股票代码（每行一个）。
-2. 运行命令：
+#### 方法2：只分析我自选的股票
+
+1. **编辑 `myshare.txt`**，每行一个股票代码：
+   ```
+   000001
+   600036
+   002352
+   601212
+   ```
+
+2. **运行程序**：
+   ```bash
+   python main.py --custom
+   ```
+
+#### 方法3：快速测试（只分析前100只）
+
 ```bash
-python3 main.py --custom
+python main.py --limit 100
 ```
 
-**测试模式（限制分析数量）：**
+---
+
+### 场景二：测试某只股票的历史策略效果
+
+想知道某只股票用这个策略在过去一年表现如何？
+
 ```bash
-python3 main.py --limit 50
+source venv/bin/activate
+
+python -c "
+from backtester import backtest_stock, BacktestResult, print_backtest_report
+
+# 修改这里的股票代码和名称
+trades = backtest_stock('002352', '顺丰控股', use_trailing_stop=True)
+
+if trades:
+    result = BacktestResult()
+    for trade in trades:
+        result.add_trade(trade)
+    
+    # 显示详细交易记录
+    print('📋 交易记录:')
+    for t in trades:
+        pnl_pct = t.get('pnl_pct', 0) * 100
+        emoji = '🟢' if pnl_pct > 0 else '🔴'
+        print(f'{emoji} {t[\"entry_date\"].strftime(\"%Y-%m-%d\")} 买入¥{t[\"entry_price\"]:.2f} → {t[\"exit_date\"].strftime(\"%Y-%m-%d\")} 卖出¥{t[\"exit_price\"]:.2f} | {t[\"exit_reason\"]} | {pnl_pct:+.2f}%')
+    
+    print()
+    print_backtest_report(result)
+else:
+    print('无交易记录')
+"
 ```
 
-## 📈 策略逻辑说明
+---
 
-### 买入条件
-1. **趋势确认**：收盘价站上 20 日均线（MA20）。
-2. **动能爆发**：当日成交量较前一日放大 1.2 倍以上。
-3. **防追高过滤**：收盘价偏离 MA20 不超过 3%。
+### 场景三：回测我的自选股
 
-### 止损逻辑
-设定触发价为以下二者中的**较高值**：
-- 买入价下跌 5%。
-- 跌破 20 日均线（MA20）。
-
-### 止盈逻辑
-- **固定止盈**：目标收益率为 15%。
-- **移动止盈**：当股价从持仓期间最高点回落 8% 时触发止盈（保护利润）。
-
-### 仓位管理
-- 默认单只股票占用总资金的 10%。
-
-## 📊 输出示例
-程序运行后将在终端输出“明日操作清单”，并同步保存至 `trading_plan.csv`。
-
-```text
-【1】蓝色光标 (300058)
-    收盘价: ¥11.52
-    建议买入价: ¥11.52
-    止损价: ¥10.94 (跌破即卖出)
-    止盈价: ¥13.25 (达到即卖出)
-    建议仓位: 800股 (约¥9216，占10%)
+```bash
+# 确保 myshare.txt 中有你的股票代码
+python backtester.py
 ```
+
+**输出：**
+- 胜率、盈亏比、最大回撤等指标
+- 最近10笔交易记录
+
+---
+
+### 场景四：生成可视化回测报告
+
+```bash
+python -c "
+from backtester import backtest_stock
+from visualizer import plot_performance_report
+
+# 收集多只股票的交易数据
+trades = []
+stocks = [('000001', '平安银行'), ('600036', '招商银行'), ('002352', '顺丰控股')]
+
+for code, name in stocks:
+    trades += backtest_stock(code, name)
+
+# 生成可视化报告
+plot_performance_report(trades, 'my_report.png')
+print('报告已生成: my_report.png')
+"
+
+# 打开报告图片
+open my_report.png
+```
+
+---
+
+### 场景五：记录我买入的股票（持仓跟踪）
+
+#### 添加持仓
+
+```bash
+python -c "
+from position_tracker import position_tracker
+
+# 添加持仓（代码、名称、买入价、股数、止损价、止盈价、行业）
+position_tracker.add_position(
+    '002352',           # 股票代码
+    '顺丰控股',          # 名称
+    42.50,              # 买入价
+    1000,               # 股数
+    40.38,              # 止损价
+    48.88,              # 止盈价
+    '物流'              # 行业
+)
+
+# 查看当前持仓
+position_tracker.print_positions()
+"
+```
+
+#### 查看所有持仓
+
+```bash
+python -c "
+from position_tracker import position_tracker
+position_tracker.print_positions()
+"
+```
+
+#### 卖出股票
+
+```bash
+python -c "
+from position_tracker import position_tracker
+
+# 卖出（代码、卖出价、原因）
+trade = position_tracker.remove_position('002352', 48.50, '止盈')
+if trade:
+    print(f'盈亏: ¥{trade[\"pnl\"]:.2f} ({trade[\"pnl_pct\"]:+.2f}%)')
+"
+```
+
+---
+
+### 场景六：检查今天能不能交易（回撤控制）
+
+```bash
+python -c "
+from drawdown_controller import drawdown_controller
+
+# 更新当前资金（根据实际情况修改）
+can_trade, msg = drawdown_controller.update_capital(95000)
+print(msg)
+
+# 查看详细状态
+drawdown_controller.print_status()
+"
+```
+
+---
+
+### 场景七：配置消息推送（钉钉/微信）
+
+1. 编辑 `notification_config.json`
+
+2. 示例（钉钉机器人）：
+   ```json
+   {
+     "enabled": true,
+     "channels": {
+       "dingtalk": {
+         "enabled": true,
+         "webhook": "https://oapi.dingtalk.com/robot/send?access_token=你的token",
+         "secret": "你的密钥"
+       }
+     }
+   }
+   ```
+
+3. 测试推送：
+   ```bash
+   python -c "
+   from notifier import notification_manager
+   notification_manager.send_all('测试', '这是一条测试消息')
+   "
+   ```
+
+---
+
+## ⚙️ 配置说明
+
+所有配置都在 `config.py` 文件中：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `STOP_LOSS_RATIO` | 0.05 | 止损比例（5%） |
+| `TAKE_PROFIT_RATIO` | 0.15 | 止盈比例（15%） |
+| `TRAILING_STOP_RATIO` | 0.08 | 移动止盈回撤（8%） |
+| `MA_SHORT` | 20 | 短期均线周期 |
+| `MA_LONG` | 60 | 长期均线周期 |
+| `VOLUME_RATIO_THRESHOLD` | 1.2 | 放量倍数阈值 |
+| `MAX_POSITIONS` | 10 | 最大持仓数量 |
+| `MAX_SECTOR_POSITIONS` | 3 | 同行业最大持仓 |
+| `TOTAL_CAPITAL` | 100000 | 总资金（用于计算仓位） |
+| `POSITION_RATIO` | 0.10 | 单笔仓位比例（10%） |
+
+---
+
+## 📁 文件说明
+
+| 文件 | 作用 |
+|------|------|
+| `main.py` | 主程序入口 |
+| `config.py` | 配置参数 |
+| `strategy.py` | 策略逻辑（买入信号、止损止盈） |
+| `data_fetcher.py` | 数据获取（AKShare） |
+| `stock_pool.py` | 股票池管理 |
+| `plan_generator.py` | 交易计划生成 |
+| `backtester.py` | 回测引擎 |
+| `transaction_cost.py` | 交易成本模型 |
+| `position_tracker.py` | 持仓跟踪 |
+| `drawdown_controller.py` | 回撤控制 |
+| `visualizer.py` | 可视化报告 |
+| `notifier.py` | 消息推送 |
+| `myshare.txt` | 自选股票池 |
+| `trading_plan.csv` | 生成的交易计划 |
+| `positions.json` | 持仓记录 |
+| `notification_config.json` | 推送配置 |
+
+---
+
+## 🔧 常见问题
+
+### Q: 运行报错 `ModuleNotFoundError`
+```bash
+# 激活虚拟环境
+source venv/bin/activate
+```
+
+### Q: 数据获取失败
+网络问题或数据源限制，稍后重试即可。
+
+### Q: 如何修改止损止盈比例？
+编辑 `config.py` 中的 `STOP_LOSS_RATIO` 和 `TAKE_PROFIT_RATIO`。
+
+### Q: 如何添加新股票到自选池？
+编辑 `myshare.txt`，每行一个股票代码。
+
+### Q: 回测的收益率为什么比预期低？
+系统已加入滑点（0.1%）、佣金（万三）、印花税（千一）的交易成本，更接近实际交易。
+
+---
+
+## 📊 策略说明
+
+### 买入条件（需同时满足至少2条）
+1. ✅ **动能趋势**：收盘价站上20日均线 + 成交量放大1.2倍
+2. ✅ **突破确认**：前4日均在均线上方，最新日回踩不破
+3. ✅ **量价健康**：排除价涨量缩的背离情况
+
+### 卖出条件（满足任一即卖出）
+1. 🔴 **止损**：跌破止损价（ATR动态止损 或 固定5%）
+2. 🟢 **止盈**：涨幅达到15%
+3. 🟡 **移动止盈**：从最高点回落8%
+
+### 大盘风控
+当沪深300跌破60日均线时，停止推荐新股票。
+
+---
+
+## 🎓 进阶用法
+
+### 批量回测多只股票并导出
+
+```bash
+python -c "
+import pandas as pd
+from backtester import backtest_stock
+
+stocks = ['000001', '600036', '002352', '601212', '000002']
+all_trades = []
+
+for code in stocks:
+    trades = backtest_stock(code, '')
+    all_trades.extend(trades)
+
+# 导出到CSV
+df = pd.DataFrame(all_trades)
+df.to_csv('all_trades.csv', index=False)
+print(f'共 {len(all_trades)} 笔交易，已保存到 all_trades.csv')
+"
+```
+
+### 定时运行（每日收盘后）
+
+```bash
+# 添加到 crontab（每天17:00运行）
+# crontab -e
+# 0 17 * * 1-5 cd ~/workspace/量化 && source venv/bin/activate && python main.py >> log.txt 2>&1
+```
+
+---
 
 ## ⚠️ 免责声明
-本工具仅供量化交易学习与辅助决策参考，不构成任何投资建议。股市有风险，入市需谨慎。
+
+本工具仅供学习和研究使用，不构成任何投资建议。股市有风险，投资需谨慎。作者不对任何因使用本工具造成的损失负责。
+
+---
+
+**Happy Trading! 🚀**

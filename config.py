@@ -43,3 +43,13 @@ OUTPUT_CSV = "trading_plan.csv"
 # ============ 指数代码 ============
 # 沪深300指数代码
 HS300_CODE = "sh000300"
+
+# ============ 持仓管理 ============
+# 最大同时持仓数量
+MAX_POSITIONS = 10
+
+# 同一行业最大持仓数量
+MAX_SECTOR_POSITIONS = 3
+
+# 持仓记录文件
+POSITION_FILE = "positions.json"

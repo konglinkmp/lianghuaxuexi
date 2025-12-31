@@ -134,33 +134,42 @@ class MarketRegimeDetector:
         return regime, metrics
 
     def _calculate_adx(self, price_series: pd.Series, period: int = 14) -> float:
+        """
+        计算 ADX (平均趋向指数)
+        简化版实现，用于衡量趋势强度
+        """
         if len(price_series) < period * 2:
             return 0.0
 
-        high = price_series.rolling(window=2).max()
-        low = price_series.rolling(window=2).min()
-
-        tr = pd.concat(
-            [
-                high - low,
-                (high - price_series.shift()).abs(),
-                (low - price_series.shift()).abs(),
-            ],
-            axis=1,
-        ).max(axis=1)
-
-        atr = tr.rolling(window=period).mean()
-        if len(atr) == 0 or atr.iloc[-1] == 0:
+        try:
+            # 计算价格变化
+            price_diff = price_series.diff()
+            
+            # 计算上涨和下跌的移动平均
+            up_moves = (price_diff > 0).astype(float)
+            down_moves = (price_diff < 0).astype(float)
+            
+            # 使用 rolling 计算趋势方向的比例
+            trend_up_series = up_moves.rolling(window=period).mean()
+            trend_down_series = down_moves.rolling(window=period).mean()
+            
+            # 计算 DX Series
+            dx_series = pd.Series(index=price_series.index, dtype=float)
+            for i in range(period, len(price_series)):
+                trend_up = trend_up_series.iloc[i]
+                trend_down = trend_down_series.iloc[i]
+                denominator = trend_up + trend_down + 1e-10
+                dx_series.iloc[i] = abs(trend_up - trend_down) / denominator * 100
+            
+            # 计算 ADX (DX 的移动平均)
+            adx_series = dx_series.rolling(window=period).mean()
+            
+            # 获取最新的 ADX 值
+            latest_adx = adx_series.iloc[-1]
+            return float(latest_adx) if not pd.isna(latest_adx) else 0.0
+            
+        except Exception:
             return 0.0
-
-        trend_up = (price_series.diff() > 0).rolling(window=period).mean().iloc[-1]
-        trend_down = (price_series.diff() < 0).rolling(window=period).mean().iloc[-1]
-
-        denominator = trend_up + trend_down + 1e-10
-        dx = abs(trend_up - trend_down) / denominator * 100
-        adx = dx.rolling(window=period).mean()
-
-        return adx.iloc[-1] if not pd.isna(adx.iloc[-1]) else 0.0
 
     def _estimate_market_breadth(self, price_series: pd.Series) -> float:
         ma20 = price_series.rolling(window=20).mean()

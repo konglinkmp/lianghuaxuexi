@@ -5,12 +5,8 @@
 
 import pandas as pd
 from .data_fetcher import get_index_daily_history
-from config.config import (
-    MA_SHORT, MA_LONG, 
-    VOLUME_RATIO_THRESHOLD,
-    STOP_LOSS_RATIO, TAKE_PROFIT_RATIO,
-    MAX_PRICE_DEVIATION, TRAILING_STOP_RATIO
-)
+from .market_regime import adaptive_strategy, AdaptiveParameters
+from config.config import MA_SHORT, MA_LONG
 
 
 def calculate_ma(df: pd.DataFrame, period: int) -> pd.Series:
@@ -56,6 +52,13 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> float:
     return atr.iloc[-1] if not pd.isna(atr.iloc[-1]) else 0.0
 
 
+def _get_adaptive_params() -> AdaptiveParameters:
+    try:
+        return adaptive_strategy.get_current_params()
+    except Exception:
+        return AdaptiveParameters()
+
+
 class MultiStrategyValidator:
     """
     复合策略验证器
@@ -79,10 +82,11 @@ class MultiStrategyValidator:
         df = df.copy()
         df['ma20'] = calculate_ma(df, MA_SHORT)
         
+        params = _get_adaptive_params()
         triggered_strategies = []
         
         # 策略1: 原动能趋势（站上MA20 + 放量）
-        if self._momentum_trend(df):
+        if self._momentum_trend(df, params.volume_threshold, params.max_price_deviation):
             triggered_strategies.append("动能趋势")
         
         # 策略2: 突破回踩确认
@@ -98,7 +102,7 @@ class MultiStrategyValidator:
         
         return is_valid, triggered_strategies
     
-    def _momentum_trend(self, df: pd.DataFrame) -> bool:
+    def _momentum_trend(self, df: pd.DataFrame, volume_threshold: float, max_price_deviation: float) -> bool:
         """原动能趋势策略：站上MA20 + 成交量放大"""
         latest = df.iloc[-1]
         prev = df.iloc[-2]
@@ -107,10 +111,10 @@ class MultiStrategyValidator:
         price_above_ma = latest['close'] > latest['ma20']
         
         # 成交量较前日放大1.2倍以上
-        volume_increase = latest['volume'] > prev['volume'] * VOLUME_RATIO_THRESHOLD
+        volume_increase = latest['volume'] > prev['volume'] * volume_threshold
         
         # 价格未过分远离均线（防止追高）
-        price_not_too_high = latest['close'] <= latest['ma20'] * (1 + MAX_PRICE_DEVIATION)
+        price_not_too_high = latest['close'] <= latest['ma20'] * (1 + max_price_deviation)
         
         return price_above_ma and volume_increase and price_not_too_high
     
@@ -168,8 +172,13 @@ def check_buy_signal(df: pd.DataFrame) -> bool:
     return is_valid
 
 
-def calculate_stop_loss(buy_price: float, ma20: float, df: pd.DataFrame = None, 
-                        atr_multiplier: float = 1.5) -> float:
+def calculate_stop_loss(
+    buy_price: float,
+    ma20: float,
+    df: pd.DataFrame = None,
+    atr_multiplier: float = None,
+    stop_loss_ratio: float = None,
+) -> float:
     """
     计算止损价（支持ATR波动率自适应）
     
@@ -188,8 +197,14 @@ def calculate_stop_loss(buy_price: float, ma20: float, df: pd.DataFrame = None,
     Returns:
         止损触发价
     """
-    # 固定止损价（5%）
-    fixed_stop = buy_price * (1 - STOP_LOSS_RATIO)
+    params = _get_adaptive_params()
+    if atr_multiplier is None:
+        atr_multiplier = params.atr_multiplier
+    if stop_loss_ratio is None:
+        stop_loss_ratio = params.stop_loss_ratio
+
+    # 固定止损价
+    fixed_stop = buy_price * (1 - stop_loss_ratio)
     
     # 均线止损价（略低于均线，给予一定容差）
     ma_stop = ma20 * 0.99
@@ -206,7 +221,7 @@ def calculate_stop_loss(buy_price: float, ma20: float, df: pd.DataFrame = None,
     return max(fixed_stop, ma_stop)
 
 
-def calculate_take_profit(buy_price: float) -> float:
+def calculate_take_profit(buy_price: float, take_profit_ratio: float = None) -> float:
     """
     计算止盈价
     
@@ -218,10 +233,12 @@ def calculate_take_profit(buy_price: float) -> float:
     Returns:
         止盈触发价
     """
-    return buy_price * (1 + TAKE_PROFIT_RATIO)
+    params = _get_adaptive_params()
+    ratio = take_profit_ratio if take_profit_ratio is not None else params.take_profit_ratio
+    return buy_price * (1 + ratio)
 
 
-def calculate_trailing_stop(highest_price: float) -> float:
+def calculate_trailing_stop(highest_price: float, trailing_stop_ratio: float = None) -> float:
     """
     计算移动止盈价
     
@@ -233,7 +250,9 @@ def calculate_trailing_stop(highest_price: float) -> float:
     Returns:
         移动止盈触发价
     """
-    return highest_price * (1 - TRAILING_STOP_RATIO)
+    params = _get_adaptive_params()
+    ratio = trailing_stop_ratio if trailing_stop_ratio is not None else params.trailing_stop_ratio
+    return highest_price * (1 - ratio)
 
 
 def check_market_risk() -> tuple:

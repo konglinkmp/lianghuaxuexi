@@ -43,6 +43,9 @@ source venv/bin/activate
 
 # 运行主程序（默认分析2000只股票）
 PYTHONPATH=src python -m quant.main
+
+# 可选：禁用自适应参数
+PYTHONPATH=src python -m quant.main --no-adaptive
 ```
 
 **输出结果：**
@@ -120,6 +123,9 @@ else:
 ```bash
 # 确保 data/myshare.txt 中有你的股票代码
 PYTHONPATH=src python -m quant.backtester
+
+# 可选：输出专业风险报告
+PYTHONPATH=src python -m quant.backtester --risk-report
 ```
 
 **输出：**

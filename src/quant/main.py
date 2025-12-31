@@ -10,6 +10,7 @@ A股量化交易决策辅助工具 - 主程序入口
     PYTHONPATH=src python -m quant.main                    # 使用全A股（剔除ST）
     PYTHONPATH=src python -m quant.main --custom           # 使用自定义股票池 data/myshare.txt
     PYTHONPATH=src python -m quant.main --custom --file data/pool.txt  # 指定自定义股票池文件
+    PYTHONPATH=src python -m quant.main --no-adaptive      # 禁用自适应参数
 """
 
 import argparse
@@ -18,6 +19,8 @@ from datetime import datetime
 from .stock_pool import get_final_pool
 from .strategy import check_market_risk
 from .plan_generator import generate_trading_plan, print_trading_plan, save_trading_plan
+from .market_regime import adaptive_strategy
+from .data_fetcher import get_index_daily_history
 from config.config import TOTAL_CAPITAL
 
 
@@ -28,6 +31,20 @@ def print_header():
     print(f"📅 运行时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"💰 资金配置：¥{TOTAL_CAPITAL:,.0f}")
     print("=" * 70)
+
+
+def update_market_regime() -> str:
+    try:
+        index_df = get_index_daily_history()
+        if index_df.empty:
+            return ""
+
+        result = adaptive_strategy.update_regime(index_df["close"])
+        adaptive_strategy.print_status()
+        return result.get("regime_name", "")
+    except Exception as exc:
+        print(f"[警告] 市场状态识别失败: {exc}")
+        return ""
 
 
 def main():
@@ -41,6 +58,8 @@ def main():
                         help='限制分析股票数量（0表示不限制，用于测试）')
     parser.add_argument('--skip-risk-check', action='store_true',
                         help='跳过大盘风险检查')
+    parser.add_argument('--no-adaptive', action='store_true',
+                        help='禁用市场状态自适应参数')
     
     args = parser.parse_args()
     
@@ -60,6 +79,15 @@ def main():
     else:
         print("\n⏭️ 已跳过大盘风险检查")
     
+    # Step 1.5: 更新市场状态（可选）
+    market_status = ""
+    if args.no_adaptive:
+        adaptive_strategy.reset()
+        print("\n⏭️ 已禁用自适应参数")
+    else:
+        print("\n🧭 正在识别市场状态...")
+        market_status = update_market_regime()
+
     # Step 2: 获取股票池
     print("\n📊 正在获取股票池...")
     
@@ -91,7 +119,7 @@ def main():
     plan = generate_trading_plan(stock_pool, verbose=True)
     
     # Step 4: 输出结果
-    print_trading_plan(plan)
+    print_trading_plan(plan, market_status=market_status)
     save_trading_plan(plan)
     
     print("\n✅ 分析完成！")

@@ -12,7 +12,7 @@
 
 ---
 
-## 📁 **新增文件：`market_regime.py`**
+## 📁 **新增文件：`src/quant/market_regime.py`**
 
 ```python
 """
@@ -373,7 +373,7 @@ if __name__ == "__main__":
 
 ---
 
-## 📁 **新增文件：`risk_metrics.py`**
+## 📁 **新增文件：`src/quant/risk_metrics.py`**
 
 ```python
 """
@@ -814,7 +814,7 @@ from .strategy import (
 )
 from config.config import MA_SHORT, TRAILING_STOP_RATIO
 from .transaction_cost import TransactionCostModel, default_cost_model
-from market_regime import adaptive_strategy  # 新增：自适应策略
+from .market_regime import adaptive_strategy  # 新增：自适应策略
 
 
 class BacktestResult:
@@ -1136,7 +1136,7 @@ def print_backtest_report(result: BacktestResult):
 if __name__ == "__main__":
     from .stock_pool import load_custom_pool
     from .data_fetcher import get_all_a_stock_list
-    from risk_metrics import risk_calculator  # 新增：风险分析
+    from .risk_metrics import risk_calculator  # 新增：风险分析
     
     print("🚀 启动增强版回测引擎...")
     
@@ -1193,7 +1193,7 @@ from .stock_pool import get_final_pool
 from .strategy import check_market_risk
 from .plan_generator import generate_trading_plan, print_trading_plan, save_trading_plan
 from config.config import TOTAL_CAPITAL
-from market_regime import adaptive_strategy  # 新增：自适应策略
+from .market_regime import adaptive_strategy  # 新增：自适应策略
 from .data_fetcher import get_index_daily_history  # 新增：获取指数数据
 
 
@@ -1364,7 +1364,7 @@ from config.config import (
     STOP_LOSS_RATIO, TAKE_PROFIT_RATIO,
     MAX_PRICE_DEVIATION, TRAILING_STOP_RATIO
 )
-from market_regime import adaptive_strategy  # 新增：自适应策略
+from .market_regime import adaptive_strategy  # 新增：自适应策略
 
 
 def calculate_ma(df: pd.DataFrame, period: int) -> pd.Series:
@@ -1555,7 +1555,7 @@ if __name__ == "__main__":
     print("测试自适应策略集成...")
     
     # 更新市场状态
-    from market_regime import adaptive_strategy
+    from .market_regime import adaptive_strategy
     hs300_df = get_index_daily_history(days=100)
     if not hs300_df.empty:
         adaptive_strategy.update_regime(hs300_df['close'])
@@ -1610,7 +1610,7 @@ PYTHONPATH=src python -m quant.main --no-adaptive
 PYTHONPATH=src python -m quant.main --no-parallel
 
 # 测试市场状态识别
-PYTHONPATH=src python -c "from market_regime import adaptive_strategy; from quant.data_fetcher import get_index_daily_history; hs300 = get_index_daily_history(); result = adaptive_strategy.update_regime(hs300['close']); adaptive_strategy.print_status()"
+PYTHONPATH=src python -c "from quant.market_regime import adaptive_strategy; from quant.data_fetcher import get_index_daily_history; hs300 = get_index_daily_history(); result = adaptive_strategy.update_regime(hs300['close']); adaptive_strategy.print_status()"
 
 # 运行专业回测
 PYTHONPATH=src python -m quant.backtester
@@ -1621,7 +1621,7 @@ PYTHONPATH=src python -m quant.backtester
 PYTHONPATH=src python -c "
 from quant.backtester import run_backtest
 from quant.stock_pool import get_final_pool
-from risk_metrics import risk_calculator
+from quant.risk_metrics import risk_calculator
 
 pool = get_final_pool(use_custom=True)
 result = run_backtest(pool.head(20), parallel=True)
@@ -1676,7 +1676,7 @@ risk_calculator.print_risk_report(report)
 ```bash
 # 1. 查看当前市场状态
 PYTHONPATH=src python -c "
-from market_regime import adaptive_strategy
+from quant.market_regime import adaptive_strategy
 from quant.data_fetcher import get_index_daily_history
 
 print('📊 市场状态分析...')
@@ -1719,7 +1719,7 @@ print(f'速度提升: {serial_time/parallel_time:.1f}倍')
 PYTHONPATH=src python -c "
 from quant.backtester import run_backtest
 from quant.stock_pool import get_final_pool
-from risk_metrics import risk_calculator
+from quant.risk_metrics import risk_calculator
 
 print('📈 生成专业风险报告...')
 pool = get_final_pool(use_custom=True).head(10)

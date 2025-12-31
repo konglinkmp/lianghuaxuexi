@@ -8,11 +8,12 @@ import pandas as pd
 from datetime import datetime
 from .data_fetcher import get_stock_daily_history
 from .strategy import (
-    check_buy_signal, 
-    calculate_stop_loss, 
+    check_buy_signal,
+    calculate_stop_loss,
     calculate_take_profit,
-    get_latest_ma20
+    get_latest_ma20,
 )
+from .market_regime import adaptive_strategy
 from config.config import POSITION_RATIO, TOTAL_CAPITAL, OUTPUT_CSV, MAX_POSITIONS
 from .position_tracker import position_tracker, portfolio_manager
 
@@ -33,12 +34,19 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
     plans = []
     total = len(stock_pool)
     
+    params = adaptive_strategy.get_current_params()
+    position_ratio = params.position_ratio or POSITION_RATIO
+    max_positions = params.max_positions or MAX_POSITIONS
+
+    # 同步到持仓管理器（保持限制一致）
+    portfolio_manager.max_positions = max_positions
+
     # 获取当前持仓数量
     current_positions = position_tracker.get_position_count()
-    remaining_slots = MAX_POSITIONS - current_positions
+    remaining_slots = max(max_positions - current_positions, 0)
     
     if verbose and use_position_limit:
-        print(f"[持仓] 当前持仓 {current_positions}/{MAX_POSITIONS}，还可买入 {remaining_slots} 只")
+        print(f"[持仓] 当前持仓 {current_positions}/{max_positions}，还可买入 {remaining_slots} 只")
     
     for idx, row in stock_pool.iterrows():
         code = row['代码']
@@ -83,7 +91,7 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
             take_profit = calculate_take_profit(close_price)
             
             # 计算建议仓位金额
-            position_amount = TOTAL_CAPITAL * POSITION_RATIO
+            position_amount = TOTAL_CAPITAL * position_ratio
             
             # 计算建议股数（A股一手100股）
             suggested_shares = int(position_amount / close_price / 100) * 100
@@ -100,7 +108,7 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
                 'MA20': round(ma20, 2),
                 '建议股数': suggested_shares,
                 '建议金额': round(suggested_shares * close_price, 2),
-                '仓位比例': f"{POSITION_RATIO * 100:.0f}%"
+                '仓位比例': f"{position_ratio * 100:.0f}%"
             })
             
         except Exception as e:
@@ -138,7 +146,9 @@ def print_trading_plan(plan_df: pd.DataFrame, market_status: str = ""):
     
     # 显示当前持仓状态
     current_positions = position_tracker.get_position_count()
-    print(f"💼 当前持仓: {current_positions}/{MAX_POSITIONS}")
+    params = adaptive_strategy.get_current_params()
+    max_positions = params.max_positions or MAX_POSITIONS
+    print(f"💼 当前持仓: {current_positions}/{max_positions}")
     print("=" * 80)
     
     # 格式化打印

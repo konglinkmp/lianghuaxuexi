@@ -3,20 +3,23 @@
 用于验证策略在历史数据上的表现
 """
 
+import argparse
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from datetime import datetime
+from typing import Optional
+
 import pandas as pd
 import numpy as np
-from datetime import datetime
-from .data_fetcher import get_stock_daily_history
+from .data_fetcher import get_stock_daily_history, get_index_daily_history
 from .strategy import (
-    check_buy_signal,
     calculate_stop_loss,
     calculate_take_profit,
-    get_latest_ma20,
     calculate_ma,
-    calculate_atr
 )
-from config.config import MA_SHORT, TRAILING_STOP_RATIO
-from .transaction_cost import TransactionCostModel, default_cost_model
+from config.config import MA_SHORT
+from .market_regime import adaptive_strategy, AdaptiveParameters
+from .transaction_cost import default_cost_model
 
 
 class BacktestResult:
@@ -79,8 +82,14 @@ class BacktestResult:
         }
 
 
-def backtest_stock(symbol: str, name: str = "", use_trailing_stop: bool = True,
-                   use_cost_model: bool = True, shares: int = 1000) -> list:
+def backtest_stock(
+    symbol: str,
+    name: str = "",
+    use_trailing_stop: bool = True,
+    use_cost_model: bool = True,
+    shares: int = 1000,
+    adaptive_params: Optional[AdaptiveParameters] = None,
+) -> list:
     """
     对单只股票进行回测
     
@@ -97,6 +106,8 @@ def backtest_stock(symbol: str, name: str = "", use_trailing_stop: bool = True,
     trades = []
     cost_model = default_cost_model if use_cost_model else None
     
+    params = adaptive_params or adaptive_strategy.get_current_params()
+
     # 获取历史数据（获取更长的数据用于回测）
     df = get_stock_daily_history(symbol, days=365)
     
@@ -125,17 +136,24 @@ def backtest_stock(symbol: str, name: str = "", use_trailing_stop: bool = True,
         if not in_position:
             # 检查买入信号（简化版：价格站上MA20且放量）
             price_above_ma = current_price > current['ma20']
-            volume_increase = current['volume'] > prev['volume'] * 1.2
+            volume_increase = current['volume'] > prev['volume'] * params.volume_threshold
+            price_not_too_high = current_price <= current['ma20'] * (1 + params.max_price_deviation)
             
-            if price_above_ma and volume_increase:
+            if price_above_ma and volume_increase and price_not_too_high:
                 # 买入
                 in_position = True
                 entry_price = current_price
                 entry_date = current_date
                 # 使用ATR动态止损（传入当前为止的历史数据）
                 historical_df = df.iloc[:i+1]
-                stop_loss = calculate_stop_loss(entry_price, current['ma20'], historical_df)
-                take_profit = calculate_take_profit(entry_price)
+                stop_loss = calculate_stop_loss(
+                    entry_price,
+                    current['ma20'],
+                    historical_df,
+                    atr_multiplier=params.atr_multiplier,
+                    stop_loss_ratio=params.stop_loss_ratio,
+                )
+                take_profit = calculate_take_profit(entry_price, take_profit_ratio=params.take_profit_ratio)
                 highest_since_entry = entry_price
                 
         else:
@@ -159,7 +177,7 @@ def backtest_stock(symbol: str, name: str = "", use_trailing_stop: bool = True,
             
             # 3. 移动止盈（从最高点回落8%）
             elif use_trailing_stop and highest_since_entry > entry_price * 1.10:
-                trailing_stop = highest_since_entry * (1 - TRAILING_STOP_RATIO)
+                trailing_stop = highest_since_entry * (1 - params.trailing_stop_ratio)
                 if current_price <= trailing_stop:
                     exit_reason = "移动止盈"
                     exit_price = trailing_stop
@@ -206,7 +224,77 @@ def backtest_stock(symbol: str, name: str = "", use_trailing_stop: bool = True,
     return trades
 
 
-def run_backtest(stock_pool: pd.DataFrame, verbose: bool = True) -> BacktestResult:
+def backtest_single_stock(args):
+    """
+    单只股票回测（适配并行计算）
+    """
+    symbol, name, use_trailing_stop, use_cost_model, shares, adaptive_params = args
+    return backtest_stock(
+        symbol,
+        name,
+        use_trailing_stop=use_trailing_stop,
+        use_cost_model=use_cost_model,
+        shares=shares,
+        adaptive_params=adaptive_params,
+    )
+
+
+def run_backtest_parallel(
+    stock_pool: pd.DataFrame,
+    max_workers: int = 4,
+    verbose: bool = True,
+    adaptive_params: Optional[AdaptiveParameters] = None,
+) -> BacktestResult:
+    """
+    并行回测
+    """
+    result = BacktestResult()
+    total = len(stock_pool)
+
+    if verbose:
+        print(f"[回测] 开始并行回测 {total} 只股票，使用 {max_workers} 个进程...")
+        start_time = datetime.now()
+
+    tasks = []
+    for _, row in stock_pool.iterrows():
+        tasks.append((row['代码'], row['名称'], True, True, 1000, adaptive_params))
+
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        future_to_idx = {}
+        for idx, task in enumerate(tasks):
+            future = executor.submit(backtest_single_stock, task)
+            future_to_idx[future] = idx
+
+        completed = 0
+        for future in as_completed(future_to_idx):
+            try:
+                trades = future.result()
+                for trade in trades:
+                    result.add_trade(trade)
+
+                completed += 1
+                if verbose and completed % 10 == 0:
+                    progress = completed / total * 100
+                    print(f"[进度] {completed}/{total} ({progress:.1f}%)")
+            except Exception as exc:
+                if verbose:
+                    idx = future_to_idx[future]
+                    print(f"[错误] 股票 {idx} 回测失败: {exc}")
+
+    if verbose:
+        elapsed = (datetime.now() - start_time).total_seconds()
+        print(f"[完成] 回测完成，耗时 {elapsed:.1f} 秒")
+
+    return result
+
+
+def run_backtest(
+    stock_pool: pd.DataFrame,
+    verbose: bool = True,
+    parallel: bool = True,
+    max_workers: Optional[int] = None,
+    use_adaptive: bool = True,
+) -> BacktestResult:
     """
     对股票池进行回测
     
@@ -217,25 +305,48 @@ def run_backtest(stock_pool: pd.DataFrame, verbose: bool = True) -> BacktestResu
     Returns:
         BacktestResult: 回测结果
     """
+    adaptive_params = None
+    if use_adaptive:
+        try:
+            index_df = get_index_daily_history()
+            if not index_df.empty:
+                adaptive_strategy.update_regime(index_df["close"])
+                adaptive_params = adaptive_strategy.get_current_params()
+        except Exception as exc:
+            if verbose:
+                print(f"[警告] 自适应参数更新失败: {exc}")
+    else:
+        adaptive_strategy.reset()
+
+    if parallel and len(stock_pool) > 10:
+        if max_workers is None or max_workers <= 0:
+            max_workers = min(max(multiprocessing.cpu_count() - 1, 1), 8)
+        return run_backtest_parallel(
+            stock_pool,
+            max_workers=max_workers,
+            verbose=verbose,
+            adaptive_params=adaptive_params,
+        )
+
     result = BacktestResult()
     total = len(stock_pool)
-    
+
     for idx, row in stock_pool.iterrows():
         code = row['代码']
         name = row['名称']
-        
+
         if verbose and (idx + 1) % 10 == 0:
             print(f"[回测进度] {idx + 1}/{total} ({(idx + 1) / total * 100:.1f}%)")
-        
+
         try:
-            trades = backtest_stock(code, name)
+            trades = backtest_stock(code, name, adaptive_params=adaptive_params)
             for trade in trades:
                 result.add_trade(trade)
-        except Exception as e:
+        except Exception as exc:
             if verbose:
-                print(f"[警告] 回测 {code} 时出错: {e}")
+                print(f"[警告] 回测 {code} 时出错: {exc}")
             continue
-    
+
     return result
 
 
@@ -269,12 +380,23 @@ def print_backtest_report(result: BacktestResult):
 if __name__ == "__main__":
     from .stock_pool import load_custom_pool
     from .data_fetcher import get_all_a_stock_list
-    
+
+    parser = argparse.ArgumentParser(description="量化回测引擎")
+    parser.add_argument("--no-parallel", action="store_true", help="禁用并行回测")
+    parser.add_argument("--max-workers", type=int, default=0, help="并行进程数（默认自动）")
+    parser.add_argument("--no-adaptive", action="store_true", help="禁用自适应参数")
+    parser.add_argument("--risk-report", action="store_true", help="输出风险指标报告")
+    args = parser.parse_args()
+
+    parallel = not args.no_parallel
+    max_workers = args.max_workers if args.max_workers > 0 else None
+    use_adaptive = not args.no_adaptive
+
     print("🚀 启动回测引擎...")
-    
+
     # 加载自定义股票池
     custom_codes = load_custom_pool("data/myshare.txt")
-    
+
     if custom_codes:
         print(f"[信息] 使用自定义股票池: {custom_codes}")
         all_stocks = get_all_a_stock_list()
@@ -288,10 +410,22 @@ if __name__ == "__main__":
             '代码': ['000001', '600000', '000002'],
             '名称': ['平安银行', '浦发银行', '万科A']
         })
-    
+
     if stock_pool.empty:
         print("[错误] 股票池为空")
     else:
         print(f"[信息] 开始回测 {len(stock_pool)} 只股票...")
-        result = run_backtest(stock_pool, verbose=True)
+        result = run_backtest(
+            stock_pool,
+            verbose=True,
+            parallel=parallel,
+            max_workers=max_workers,
+            use_adaptive=use_adaptive,
+        )
         print_backtest_report(result)
+
+        if args.risk_report:
+            from .risk_metrics import risk_calculator
+
+            report = risk_calculator.generate_risk_report(result.trades)
+            risk_calculator.print_risk_report(report)

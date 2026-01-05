@@ -252,6 +252,26 @@ drawdown_controller.print_status()
 
 ---
 
+### 场景八：辅助工具（快速诊断）
+
+为了方便日常快速查看，项目中提供了两个独立的辅助工具：
+
+#### 1. 持仓快速扫描器
+一键查看当前所有持仓的技术面趋势（是否在 MA20 之上）。
+```bash
+# 运行持仓扫描
+python tools/check_holdings.py
+```
+
+#### 2. 个股深度诊断器
+对任意指定的股票进行深度技术面+基本面分析。
+```bash
+# 诊断指定股票（如：航天发展）
+python tools/analyze_stock.py 000547
+```
+
+---
+
 ## ⚙️ 配置说明
 
 所有配置都在 `config/config.py` 文件中：
@@ -291,6 +311,8 @@ drawdown_controller.print_status()
 | `data/trading_plan.csv` | 生成的交易计划 |
 | `data/positions.json` | 持仓记录 |
 | `config/notification_config.json` | 推送配置 |
+| `tools/check_holdings.py` | 持仓快速扫描工具 |
+| `tools/analyze_stock.py` | 个股深度诊断工具 |
 | `outputs/` | 图表/报告输出目录 |
 
 ---

@@ -1,6 +1,7 @@
 """
 交易计划生成器
 遍历股票池，生成"明日操作清单"
+支持分层策略（稳健层+激进层）
 """
 
 import os
@@ -15,12 +16,19 @@ from .strategy import (
     get_latest_ma20,
 )
 from .market_regime import adaptive_strategy
-from config.config import POSITION_RATIO, TOTAL_CAPITAL, OUTPUT_CSV, MAX_POSITIONS
+from config.config import (
+    POSITION_RATIO, TOTAL_CAPITAL, OUTPUT_CSV, MAX_POSITIONS,
+    ENABLE_TWO_LAYER_STRATEGY,
+    CONSERVATIVE_STOP_LOSS, CONSERVATIVE_TAKE_PROFIT, CONSERVATIVE_MAX_POSITIONS,
+    AGGRESSIVE_STOP_LOSS, AGGRESSIVE_TAKE_PROFIT, AGGRESSIVE_MAX_POSITIONS,
+)
 from .position_tracker import position_tracker, portfolio_manager
+from .layer_strategy import LayerStrategy, LAYER_AGGRESSIVE, LAYER_CONSERVATIVE
 
 
 def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
-                          use_position_limit: bool = True) -> pd.DataFrame:
+                          use_position_limit: bool = True,
+                          use_layer_strategy: bool = None) -> pd.DataFrame:
     """
     生成交易计划
     
@@ -28,10 +36,41 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
         stock_pool: 股票池DataFrame，包含 代码、名称
         verbose: 是否打印进度
         use_position_limit: 是否应用持仓数量限制
+        use_layer_strategy: 是否使用分层策略（None表示使用配置文件设置）
         
     Returns:
         DataFrame: 交易计划列表
     """
+    # 判断是否使用分层策略
+    enable_layer = use_layer_strategy if use_layer_strategy is not None else ENABLE_TWO_LAYER_STRATEGY
+    
+    if enable_layer:
+        return _generate_layer_trading_plan(stock_pool, verbose)
+    else:
+        return _generate_single_layer_plan(stock_pool, verbose, use_position_limit)
+
+
+def _generate_layer_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True) -> pd.DataFrame:
+    """
+    使用分层策略生成交易计划
+    """
+    if verbose:
+        print("\n🔄 使用分层策略（稳健层+激进层）")
+    
+    strategy = LayerStrategy(TOTAL_CAPITAL)
+    layer_signals = strategy.generate_layer_signals(stock_pool, verbose=verbose)
+    
+    # 格式化为DataFrame
+    return strategy.format_layer_plans(layer_signals)
+
+
+def _generate_single_layer_plan(stock_pool: pd.DataFrame, verbose: bool = True,
+                                 use_position_limit: bool = True) -> pd.DataFrame:
+    """
+    使用单层策略生成交易计划（原有逻辑）
+    """
+    if verbose:
+        print("\n🔄 使用单层策略（传统模式）")
     plans = []
     total = len(stock_pool)
     
@@ -144,7 +183,7 @@ def print_trading_plan(plan_df: pd.DataFrame, market_status: str = ""):
         print("📋 明日操作清单：无符合条件的股票")
         print("=" * 60)
         print("\n💡 可能原因：")
-        print("   1. 当前无个股同时满足站上MA20和成交量放大1.2倍条件")
+        print("   1. 当前无符合分类条件的股票")
         print("   2. 符合条件的股票价格偏离均线过大（追高风险）")
         print("   3. 股票池范围较小，可尝试扩大筛选范围")
         if market_status:
@@ -154,6 +193,77 @@ def print_trading_plan(plan_df: pd.DataFrame, market_status: str = ""):
     
     print("\n" + "=" * 80)
     print(f"📋 明日操作清单（生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}）")
+    
+    # 检查是否为分层策略输出
+    is_layer_strategy = 'layer' in plan_df.columns
+    
+    if is_layer_strategy:
+        _print_layer_trading_plan(plan_df, market_status)
+    else:
+        _print_single_layer_plan(plan_df, market_status)
+
+
+def _print_layer_trading_plan(plan_df: pd.DataFrame, market_status: str = ""):
+    """打印分层策略交易计划"""
+    # 按层分组
+    conservative_df = plan_df[plan_df['layer'] == LAYER_CONSERVATIVE]
+    aggressive_df = plan_df[plan_df['layer'] == LAYER_AGGRESSIVE]
+    
+    print(f"📊 共筛选出 {len(plan_df)} 只股票（稳健层 {len(conservative_df)} + 激进层 {len(aggressive_df)}）")
+    print("=" * 80)
+    
+    # 打印稳健层
+    print("\n" + "=" * 80)
+    print(f"💰 稳健层（价值趋势策略）")
+    print(f"📊 推荐数量：{len(conservative_df)}/{CONSERVATIVE_MAX_POSITIONS}")
+    print(f"⚙️ 止损: -{CONSERVATIVE_STOP_LOSS*100:.0f}% | 止盈: +{CONSERVATIVE_TAKE_PROFIT*100:.0f}%")
+    print("=" * 80)
+    
+    if conservative_df.empty:
+        print("   暂无符合条件的价值趋势股")
+    else:
+        for idx, (_, row) in enumerate(conservative_df.iterrows()):
+            _print_stock_row(row, idx + 1, "稳")
+    
+    # 打印激进层
+    print("\n" + "=" * 80)
+    print(f"🚀 激进层（热门资金策略）")
+    print(f"📊 推荐数量：{len(aggressive_df)}/{AGGRESSIVE_MAX_POSITIONS}")
+    print(f"⚙️ 止损: -{AGGRESSIVE_STOP_LOSS*100:.0f}% | 止盈: +{AGGRESSIVE_TAKE_PROFIT*100:.0f}%")
+    print("=" * 80)
+    
+    if aggressive_df.empty:
+        print("   暂无符合条件的热门资金股")
+    else:
+        for idx, (_, row) in enumerate(aggressive_df.iterrows()):
+            _print_stock_row(row, idx + 1, "激")
+    
+    # 风险提示
+    print("\n" + "=" * 80)
+    print("⚠️ 风险提示：以上仅供参考，不构成投资建议。请结合自身风险承受能力谨慎决策。")
+    print("💡 稳健层适合中线持有，激进层注意及时止盈止损。")
+    print("=" * 80)
+
+
+def _print_stock_row(row, idx: int, prefix: str):
+    """打印单只股票信息"""
+    industry = row.get('板块', '未知')
+    stock_type = row.get('stock_type', '')
+    reasons = row.get('reasons', '')
+    
+    print(f"\n【{prefix}{idx}】{row['名称']} ({row['代码']}) - 📌{industry}")
+    if stock_type:
+        type_label = "热门资金股" if stock_type == "HOT_MONEY" else "价值趋势股"
+        print(f"    类型: {type_label}")
+    if reasons:
+        print(f"    特征: {reasons}")
+    print(f"    收盘价: ¥{row['收盘价']:.2f} | MA20: ¥{row['MA20']:.2f}")
+    print(f"    止损价: ¥{row['止损价']:.2f} → 止盈价: ¥{row['止盈价']:.2f}")
+    print(f"    建议仓位: {row['建议股数']}股 (约¥{row['建议金额']:.0f}，占{row['仓位比例']})")
+
+
+def _print_single_layer_plan(plan_df: pd.DataFrame, market_status: str = ""):
+    """打印单层策略交易计划（原有格式）"""
     print(f"📊 共筛选出 {len(plan_df)} 只股票符合买入条件")
     
     # 显示当前持仓状态

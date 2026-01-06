@@ -63,3 +63,40 @@ MAX_PB = 5
 
 # 最小上市年限（避开次新股）
 MIN_LIST_YEARS = 2
+
+# ============ 分层策略配置 ============
+# 分层策略总开关
+ENABLE_TWO_LAYER_STRATEGY = True
+
+# 资金分配
+CONSERVATIVE_CAPITAL_RATIO = 0.70  # 稳健层资金比例
+AGGRESSIVE_CAPITAL_RATIO = 0.30    # 激进层资金比例
+
+# 股票分类阈值 - 热门资金股
+HOT_STOCK_MIN_PE = 80              # 热门股最小PE
+HOT_STOCK_MIN_TURNOVER = 8.0       # 最小换手率(%)
+HOT_STOCK_MIN_MOMENTUM = 25.0      # 最小10日涨幅(%)
+HOT_STOCK_VOLUME_RATIO = 3.0       # 成交量放大倍数
+
+# 股票分类阈值 - 价值趋势股
+VALUE_STOCK_MAX_PE = 50            # 价值股最大PE
+VALUE_STOCK_MAX_PB = 5.0           # 价值股最大PB
+VALUE_STOCK_MIN_VOLUME_RATIO = 1.3 # 最小成交量放大
+
+# 稳健层风控参数
+CONSERVATIVE_STOP_LOSS = 0.05      # 稳健层止损-5%
+CONSERVATIVE_TAKE_PROFIT = 0.15    # 稳健层止盈+15%
+CONSERVATIVE_TRAILING_STOP = 0.08  # 稳健层移动止盈-8%
+CONSERVATIVE_MAX_POSITIONS = 5     # 稳健层最大持仓数
+CONSERVATIVE_POSITION_RATIO = 0.12 # 稳健层单只仓位比例
+
+# 激进层风控参数
+AGGRESSIVE_STOP_LOSS = 0.08        # 激进层止损-8%
+AGGRESSIVE_TAKE_PROFIT = 0.25      # 激进层止盈+25%
+AGGRESSIVE_TRAILING_STOP = 0.10    # 激进层移动止盈-10%
+AGGRESSIVE_MAX_POSITIONS = 3       # 激进层最大持仓数
+AGGRESSIVE_POSITION_RATIO = 0.08   # 激进层单只仓位比例
+AGGRESSIVE_MAX_HOLDING_DAYS = 10   # 激进层最大持仓天数
+
+# 热门概念配置文件
+HOT_CONCEPTS_FILE = "data/hot_concepts.txt"

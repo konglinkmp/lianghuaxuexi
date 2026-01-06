@@ -60,6 +60,8 @@ def main():
                         help='跳过大盘风险检查')
     parser.add_argument('--no-adaptive', action='store_true',
                         help='禁用市场状态自适应参数')
+    parser.add_argument('--no-layer', action='store_true',
+                        help='禁用分层策略，使用传统单层策略')
     
     args = parser.parse_args()
     
@@ -116,7 +118,10 @@ def main():
     
     # Step 3: 生成交易计划
     print(f"\n🔍 正在分析 {len(stock_pool)} 只股票，请稍候...")
-    plan = generate_trading_plan(stock_pool, verbose=True)
+    
+    # 根据命令行参数决定是否使用分层策略
+    use_layer = not args.no_layer
+    plan = generate_trading_plan(stock_pool, verbose=True, use_layer_strategy=use_layer)
     
     # Step 4: 输出结果
     print_trading_plan(plan, market_status=market_status)

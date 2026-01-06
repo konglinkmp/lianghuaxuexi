@@ -289,6 +289,133 @@ def get_stock_fundamental(symbol: str) -> dict:
     return result
 
 
+# ============ 分层策略数据接口 ============
+
+# 概念板块缓存
+_concept_cache = {}
+
+
+def get_stock_turnover_rate(symbol: str) -> float:
+    """
+    获取股票换手率（日频）
+    
+    Args:
+        symbol: 股票代码
+        
+    Returns:
+        float: 换手率百分比，获取失败返回 0.0
+    """
+    global _stock_spot_cache
+    
+    # 优先从缓存获取
+    if symbol in _stock_spot_cache:
+        spot_data = _stock_spot_cache[symbol]
+        try:
+            turnover = spot_data.get('换手率')
+            if turnover is not None and turnover != '-' and not pd.isna(turnover):
+                return float(turnover)
+        except (ValueError, TypeError):
+            pass
+    
+    # 缓存未命中，尝试单独获取
+    try:
+        df = ak.stock_zh_a_spot_em()
+        if not df.empty:
+            row = df[df['代码'] == symbol]
+            if not row.empty:
+                turnover = row['换手率'].values[0]
+                if turnover is not None and not pd.isna(turnover):
+                    return float(turnover)
+    except Exception as e:
+        logger.warning(f"获取 {symbol} 换手率失败: {e}")
+    
+    return 0.0
+
+
+def get_stock_concepts(symbol: str) -> list:
+    """
+    获取股票所属概念板块列表
+    
+    Args:
+        symbol: 股票代码
+        
+    Returns:
+        list: 概念板块名称列表，获取失败返回空列表
+    """
+    global _concept_cache
+    
+    # 检查缓存
+    if symbol in _concept_cache:
+        return _concept_cache[symbol]
+    
+    concepts = []
+    try:
+        # 使用东方财富接口获取个股所属板块
+        df = ak.stock_individual_info_em(symbol=symbol)
+        if not df.empty:
+            for _, row in df.iterrows():
+                if row['item'] in ['板块', '概念']:
+                    value = str(row['value']) if row['value'] else ''
+                    if value:
+                        # 可能是逗号分隔的多个概念
+                        concepts.extend([c.strip() for c in value.split(',') if c.strip()])
+    except Exception as e:
+        logger.debug(f"获取 {symbol} 概念板块失败: {e}")
+    
+    _concept_cache[symbol] = concepts
+    return concepts
+
+
+def calculate_momentum(df: pd.DataFrame, days: int = 10) -> float:
+    """
+    计算N日动量（涨跌幅）
+    
+    Args:
+        df: 包含 close 列的历史数据DataFrame
+        days: 计算周期（默认10日）
+        
+    Returns:
+        float: N日涨跌幅百分比，数据不足返回 0.0
+    """
+    if df is None or df.empty or len(df) < days:
+        return 0.0
+    
+    try:
+        current_price = df['close'].iloc[-1]
+        past_price = df['close'].iloc[-days]
+        if past_price > 0:
+            return (current_price - past_price) / past_price * 100
+    except (IndexError, KeyError):
+        pass
+    
+    return 0.0
+
+
+def calculate_volume_ratio(df: pd.DataFrame, period: int = 20) -> float:
+    """
+    计算成交量较N日均量的放大倍数
+    
+    Args:
+        df: 包含 volume 列的历史数据DataFrame
+        period: 均量周期（默认20日）
+        
+    Returns:
+        float: 成交量放大倍数，数据不足返回 0.0
+    """
+    if df is None or df.empty or len(df) < period:
+        return 0.0
+    
+    try:
+        current_volume = df['volume'].iloc[-1]
+        avg_volume = df['volume'].iloc[-period:].mean()
+        if avg_volume > 0:
+            return current_volume / avg_volume
+    except (IndexError, KeyError):
+        pass
+    
+    return 0.0
+
+
 if __name__ == "__main__":
     # 简单测试
     print("测试获取A股列表...")
@@ -303,3 +430,4 @@ if __name__ == "__main__":
     print("\n测试获取沪深300指数数据...")
     index_hist = get_index_daily_history()
     print(index_hist.tail())
+

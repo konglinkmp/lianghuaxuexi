@@ -14,8 +14,8 @@ from config.config import (
     STYLE_BUCKET_MAP,
     STYLE_DEFAULT_WEIGHTS,
 )
-from .data_fetcher import get_index_daily_history, get_stock_market_caps
-from .position_tracker import position_tracker
+from ..core.data_fetcher import get_index_daily_history, get_stock_market_caps
+from ..trade.position_tracker import position_tracker
 
 
 def compute_style_weights(

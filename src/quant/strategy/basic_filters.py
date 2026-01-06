@@ -4,7 +4,7 @@
 """
 
 from datetime import datetime
-from .data_fetcher import get_stock_fundamental
+from ..core.data_fetcher import get_stock_fundamental
 from config.config import MAX_PE, MAX_PB, MIN_LIST_YEARS
 
 

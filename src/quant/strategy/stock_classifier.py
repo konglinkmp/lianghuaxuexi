@@ -6,7 +6,7 @@
 import os
 from typing import Dict, List, Set
 import pandas as pd
-from .data_fetcher import (
+from ..core.data_fetcher import (
     get_stock_fundamental,
     get_stock_turnover_rate,
     get_stock_concepts,

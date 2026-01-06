@@ -17,7 +17,7 @@ from typing import Dict, List
 from datetime import datetime
 import logging
 import akshare as ak
-from .data_fetcher import get_stock_daily_history, get_stock_turnover_rate
+from ..core.data_fetcher import get_stock_daily_history, get_stock_turnover_rate
 from .strategy import calculate_ma
 from config.config import HISTORY_DAYS
 

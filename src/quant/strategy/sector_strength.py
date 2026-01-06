@@ -22,7 +22,7 @@ from config.config import (
     CONCEPT_STRENGTH_TOP_N,
     CONCEPT_STRENGTH_OUTPUT_FILE,
 )
-from .data_fetcher import get_stock_industry, get_stock_concepts, get_index_daily_history
+from ..core.data_fetcher import get_stock_industry, get_stock_concepts, get_index_daily_history
 
 
 @dataclass

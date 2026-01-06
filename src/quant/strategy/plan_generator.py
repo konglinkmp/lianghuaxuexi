@@ -7,7 +7,7 @@
 import os
 import pandas as pd
 from datetime import datetime
-from .data_fetcher import get_stock_daily_history, get_stock_industry
+from ..core.data_fetcher import get_stock_daily_history, get_stock_industry
 from .basic_filters import check_fundamental
 from .strategy import (
     check_buy_signal,
@@ -15,9 +15,9 @@ from .strategy import (
     calculate_take_profit,
     get_latest_ma20,
 )
-from .market_regime import adaptive_strategy
-from .risk_control import get_risk_control_state
-from .risk_positioning import calculate_position_size, estimate_adv_amount
+from ..analysis.market_regime import adaptive_strategy
+from ..risk.risk_control import get_risk_control_state
+from ..risk.risk_positioning import calculate_position_size, estimate_adv_amount
 from .sector_strength import build_sector_strength_filter
 from .style_benchmark import get_style_benchmark_series
 from config.config import (
@@ -30,7 +30,7 @@ from config.config import (
     CONSERVATIVE_STOP_LOSS, CONSERVATIVE_TAKE_PROFIT, CONSERVATIVE_MAX_POSITIONS,
     AGGRESSIVE_STOP_LOSS, AGGRESSIVE_TAKE_PROFIT, AGGRESSIVE_MAX_POSITIONS,
 )
-from .position_tracker import position_tracker, portfolio_manager
+from ..trade.position_tracker import position_tracker, portfolio_manager
 from .layer_strategy import LayerStrategy, LAYER_AGGRESSIVE, LAYER_CONSERVATIVE
 
 

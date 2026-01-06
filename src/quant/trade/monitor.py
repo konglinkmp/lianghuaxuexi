@@ -17,10 +17,10 @@ import os
 # 添加项目根目录到 path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from src.quant.position_tracker import position_tracker
-from src.quant.notifier import notification_manager
-from src.quant.data_fetcher import get_index_daily_history
-from src.quant.strategy import calculate_ma
+from src.quant.trade.position_tracker import position_tracker
+from src.quant.utils.notifier import notification_manager
+from src.quant.core.data_fetcher import get_index_daily_history
+from src.quant.strategy.strategy import calculate_ma
 from config.config import OUTPUT_CSV, HS300_CODE, MA_LONG
 
 # 警报冷却时间（秒），防止重复发送

@@ -11,15 +11,15 @@ from typing import Optional
 
 import pandas as pd
 import numpy as np
-from .data_fetcher import get_stock_daily_history, get_index_daily_history
-from .strategy import (
+from ..core.data_fetcher import get_stock_daily_history, get_index_daily_history
+from ..strategy.strategy import (
     calculate_stop_loss,
     calculate_take_profit,
     calculate_ma,
 )
 from config.config import MA_SHORT
 from .market_regime import adaptive_strategy, AdaptiveParameters
-from .transaction_cost import default_cost_model
+from ..core.transaction_cost import default_cost_model
 
 
 def is_limit_down(current_price: float, prev_close: float, threshold: float = 0.098) -> bool:
@@ -433,8 +433,8 @@ def print_backtest_report(result: BacktestResult):
 
 
 if __name__ == "__main__":
-    from .stock_pool import load_custom_pool
-    from .data_fetcher import get_all_a_stock_list
+    from ..core.stock_pool import load_custom_pool
+    from ..core.data_fetcher import get_all_a_stock_list
 
     parser = argparse.ArgumentParser(description="量化回测引擎")
     parser.add_argument("--no-parallel", action="store_true", help="禁用并行回测")

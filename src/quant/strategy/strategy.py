@@ -4,9 +4,9 @@
 """
 
 import pandas as pd
-from .data_fetcher import get_index_daily_history
+from ..core.data_fetcher import get_index_daily_history
 from .style_benchmark import get_style_benchmark_series
-from .market_regime import adaptive_strategy, AdaptiveParameters
+from ..analysis.market_regime import adaptive_strategy, AdaptiveParameters
 from config.config import MA_SHORT, MA_LONG
 
 

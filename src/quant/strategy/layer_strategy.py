@@ -14,12 +14,12 @@ from .stock_classifier import (
 )
 import json
 import os
-from .position_tracker import position_tracker
-from .data_fetcher import get_stock_daily_history, get_stock_industry
+from ..trade.position_tracker import position_tracker
+from ..core.data_fetcher import get_stock_daily_history, get_stock_industry
 from .strategy import calculate_ma, calculate_atr
-from .risk_control import get_risk_control_state
-from .risk_positioning import calculate_position_size, estimate_adv_amount
-from .data_fetcher import get_stock_concepts
+from ..risk.risk_control import get_risk_control_state
+from ..risk.risk_positioning import calculate_position_size, estimate_adv_amount
+from ..core.data_fetcher import get_stock_concepts
 from config.config import (
     TOTAL_CAPITAL,
     CONSERVATIVE_CAPITAL_RATIO,

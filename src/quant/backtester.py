@@ -22,6 +22,16 @@ from .market_regime import adaptive_strategy, AdaptiveParameters
 from .transaction_cost import default_cost_model
 
 
+def is_limit_down(current_price: float, prev_close: float, threshold: float = 0.098) -> bool:
+    """
+    判定是否封死跌停
+    A股通常为10%，考虑到精度问题，默认使用9.8%作为阈值
+    """
+    if prev_close <= 0:
+        return False
+    return (prev_close - current_price) / prev_close >= threshold
+
+
 class BacktestResult:
     """回测结果类"""
     
@@ -125,6 +135,7 @@ def backtest_stock(
     stop_loss = 0.0
     take_profit = 0.0
     highest_since_entry = 0.0
+    pending_exit = None  # 记录因跌停无法卖出而挂起的退出请求
     
     # 从第MA_SHORT+1天开始回测
     for i in range(MA_SHORT + 1, len(df)):
@@ -133,18 +144,47 @@ def backtest_stock(
         current_date = current['date']
         current_price = current['close']
         
+        # 处理挂起的退出请求（前一日跌停卖不出，今日开盘卖出）
+        if pending_exit:
+            exit_reason, entry_p, entry_d = pending_exit
+            exit_price = current['open']  # 假设开盘即能卖出（保守估计）
+            
+            # 记录交易
+            gross_pnl = exit_price - entry_p
+            gross_pnl_pct = gross_pnl / entry_p
+            
+            if cost_model:
+                cost_result = cost_model.calculate_round_trip_cost(entry_p, exit_price, shares)
+                actual_pnl = cost_result['actual_profit'] / shares
+                actual_pnl_pct = cost_result['actual_return_pct'] / 100
+                total_cost = cost_result['total_cost'] / shares
+            else:
+                actual_pnl, actual_pnl_pct, total_cost = gross_pnl, gross_pnl_pct, 0
+                
+            trades.append({
+                'symbol': symbol, 'name': name,
+                'entry_date': entry_d, 'entry_price': round(entry_p, 2),
+                'exit_date': current_date, 'exit_price': round(exit_price, 2),
+                'exit_reason': f"{exit_reason}(延迟成交)",
+                'pnl': round(actual_pnl, 4), 'pnl_pct': round(actual_pnl_pct, 4),
+                'gross_pnl': round(gross_pnl, 2), 'gross_pnl_pct': round(gross_pnl_pct, 4),
+                'cost_per_share': round(total_cost, 4),
+                'holding_days': (current_date - entry_d).days
+            })
+            in_position = False
+            pending_exit = None
+            continue
+
         if not in_position:
-            # 检查买入信号（简化版：价格站上MA20且放量）
+            # 检查买入信号
             price_above_ma = current_price > current['ma20']
             volume_increase = current['volume'] > prev['volume'] * params.volume_threshold
             price_not_too_high = current_price <= current['ma20'] * (1 + params.max_price_deviation)
             
             if price_above_ma and volume_increase and price_not_too_high:
-                # 买入
                 in_position = True
                 entry_price = current_price
                 entry_date = current_date
-                # 使用ATR动态止损（传入当前为止的历史数据）
                 historical_df = df.iloc[:i+1]
                 stop_loss = calculate_stop_loss(
                     entry_price,
@@ -157,25 +197,24 @@ def backtest_stock(
                 highest_since_entry = entry_price
                 
         else:
-            # 更新最高价
             if current_price > highest_since_entry:
                 highest_since_entry = current_price
             
-            # 检查出场条件
             exit_reason = None
             exit_price = current_price
             
-            # 1. 止损
+            # 1. 止损 (加入滑点模拟)
             if current_price <= stop_loss:
                 exit_reason = "止损"
-                exit_price = stop_loss
+                # 模拟止损滑点：实际成交价通常比止损位更差
+                exit_price = stop_loss * 0.995 
             
             # 2. 固定止盈
             elif current_price >= take_profit:
                 exit_reason = "止盈"
                 exit_price = take_profit
             
-            # 3. 移动止盈（从最高点回落8%）
+            # 3. 移动止盈
             elif use_trailing_stop and highest_since_entry > entry_price * 1.10:
                 trailing_stop = highest_since_entry * (1 - params.trailing_stop_ratio)
                 if current_price <= trailing_stop:
@@ -183,43 +222,36 @@ def backtest_stock(
                     exit_price = trailing_stop
             
             if exit_reason:
-                # 记录交易
-                gross_pnl = exit_price - entry_price
-                gross_pnl_pct = gross_pnl / entry_price
-                
-                # 应用交易成本模型
-                if cost_model:
-                    cost_result = cost_model.calculate_round_trip_cost(
-                        entry_price, exit_price, shares
-                    )
-                    actual_pnl = cost_result['actual_profit'] / shares  # 每股实际盈亏
-                    actual_pnl_pct = cost_result['actual_return_pct'] / 100
-                    total_cost = cost_result['total_cost'] / shares  # 每股成本
+                # 检查是否跌停封死
+                if is_limit_down(current_price, prev['close']):
+                    # 封死跌停，无法卖出，挂起至下一交易日
+                    pending_exit = (exit_reason, entry_price, entry_date)
                 else:
-                    actual_pnl = gross_pnl
-                    actual_pnl_pct = gross_pnl_pct
-                    total_cost = 0
-                
-                trades.append({
-                    'symbol': symbol,
-                    'name': name,
-                    'entry_date': entry_date,
-                    'entry_price': round(entry_price, 2),
-                    'exit_date': current_date,
-                    'exit_price': round(exit_price, 2),
-                    'exit_reason': exit_reason,
-                    'pnl': round(actual_pnl, 4),  # 使用实际盈亏
-                    'pnl_pct': round(actual_pnl_pct, 4),
-                    'gross_pnl': round(gross_pnl, 2),  # 毛利润
-                    'gross_pnl_pct': round(gross_pnl_pct, 4),
-                    'cost_per_share': round(total_cost, 4),  # 每股成本
-                    'holding_days': (current_date - entry_date).days
-                })
-                
-                # 重置状态
-                in_position = False
-                entry_price = 0.0
-                highest_since_entry = 0.0
+                    # 正常卖出记录
+                    gross_pnl = exit_price - entry_price
+                    gross_pnl_pct = gross_pnl / entry_price
+                    
+                    if cost_model:
+                        cost_result = cost_model.calculate_round_trip_cost(entry_price, exit_price, shares)
+                        actual_pnl = cost_result['actual_profit'] / shares
+                        actual_pnl_pct = cost_result['actual_return_pct'] / 100
+                        total_cost = cost_result['total_cost'] / shares
+                    else:
+                        actual_pnl, actual_pnl_pct, total_cost = gross_pnl, gross_pnl_pct, 0
+                    
+                    trades.append({
+                        'symbol': symbol, 'name': name,
+                        'entry_date': entry_date, 'entry_price': round(entry_price, 2),
+                        'exit_date': current_date, 'exit_price': round(exit_price, 2),
+                        'exit_reason': exit_reason,
+                        'pnl': round(actual_pnl, 4), 'pnl_pct': round(actual_pnl_pct, 4),
+                        'gross_pnl': round(gross_pnl, 2), 'gross_pnl_pct': round(gross_pnl_pct, 4),
+                        'cost_per_share': round(total_cost, 4),
+                        'holding_days': (current_date - entry_date).days
+                    })
+                    in_position = False
+                    entry_price = 0.0
+                    highest_since_entry = 0.0
     
     return trades
 
@@ -308,9 +340,16 @@ def run_backtest(
     adaptive_params = None
     if use_adaptive:
         try:
-            index_df = get_index_daily_history()
+            # 获取大盘指数（沪深300）作为基准
+            index_df = get_index_daily_history(HS300_CODE)
+            # 获取小票指数（中证2000）用于风格踩踏识别
+            # 注意：中证2000代码在akshare中可能不同，这里假设配置中已定义或使用常用代码
+            csi2000_code = "sh000852" # 中证1000作为替代，或直接使用中证2000
+            small_cap_df = get_index_daily_history(csi2000_code)
+            
             if not index_df.empty:
-                adaptive_strategy.update_regime(index_df["close"])
+                benchmark_prices = small_cap_df["close"] if not small_cap_df.empty else None
+                adaptive_strategy.update_regime(index_df["close"], benchmark_prices=benchmark_prices)
                 adaptive_params = adaptive_strategy.get_current_params()
         except Exception as exc:
             if verbose:

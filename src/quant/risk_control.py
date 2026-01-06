@@ -24,7 +24,7 @@ def load_account_status(filepath: str = ACCOUNT_STATUS_FILE) -> Optional[dict]:
         return None
 
 
-def get_risk_control_state(total_capital: float, filepath: str = ACCOUNT_STATUS_FILE) -> RiskControlState:
+def get_risk_control_state(total_capital: float, filepath: str = ACCOUNT_STATUS_FILE, volatility: float = 0.0) -> RiskControlState:
     """
     获取风险控制状态
     若未提供账户净值，则默认不启用回撤限制
@@ -52,4 +52,4 @@ def get_risk_control_state(total_capital: float, filepath: str = ACCOUNT_STATUS_
         except ValueError:
             as_of = None
 
-    return drawdown_controller.evaluate(float(current_capital), as_of=as_of)
+    return drawdown_controller.evaluate(float(current_capital), as_of=as_of, volatility=volatility)

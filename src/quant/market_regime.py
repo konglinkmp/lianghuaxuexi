@@ -113,6 +113,15 @@ class MarketRegimeDetector:
         adx_value = self._calculate_adx(price_series)
         market_breadth = self._estimate_market_breadth(price_series)
 
+        # 风格偏离度计算（如果有对比指数）
+        style_drift = 0.0
+        if "benchmark_prices" in kwargs:
+            benchmark = kwargs["benchmark_prices"]
+            if len(benchmark) >= 20 and len(price_series) >= 20:
+                bench_return = benchmark.iloc[-20:].pct_change().sum()
+                price_return = price_series.iloc[-20:].pct_change().sum()
+                style_drift = price_return - bench_return
+
         regime = self._decide_regime(
             volatility=volatility,
             adx=adx_value,
@@ -120,6 +129,7 @@ class MarketRegimeDetector:
             price_above_medium=price_above_medium,
             price_above_long=price_above_long,
             market_breadth=market_breadth,
+            style_drift=style_drift,
         )
 
         metrics = {
@@ -129,6 +139,7 @@ class MarketRegimeDetector:
             "market_breadth": market_breadth,
             "ma_alignment": self._check_ma_alignment(ma_short, ma_medium, ma_long),
             "price_position": self._calculate_price_position(price_series, ma_medium),
+            "style_drift": style_drift,
         }
 
         return regime, metrics
@@ -197,7 +208,12 @@ class MarketRegimeDetector:
         price_above_medium: float,
         price_above_long: float,
         market_breadth: float,
+        style_drift: float = 0.0,
     ) -> MarketRegime:
+        # 风格踩踏判定：如果小票大幅跑输大盘（如20天跑输5%），强制进入下跌趋势
+        if style_drift < -0.05:
+            return MarketRegime.TREND_DOWN
+
         if volatility > 0.25:
             return MarketRegime.HIGH_VOLATILITY
         if volatility < 0.15 and volatility > 0:
@@ -220,8 +236,8 @@ class AdaptiveStrategy:
         self.current_params = AdaptiveParameters()
         self.regime_history = []
 
-    def update_regime(self, index_prices: pd.Series) -> Dict:
-        regime, metrics = self.regime_detector.detect(index_prices)
+    def update_regime(self, index_prices: pd.Series, benchmark_prices: Optional[pd.Series] = None) -> Dict:
+        regime, metrics = self.regime_detector.detect(index_prices, benchmark_prices=benchmark_prices)
         self.current_regime = regime
         self.current_params = AdaptiveParameters.for_regime(regime, metrics.get("volatility", 0.2))
 

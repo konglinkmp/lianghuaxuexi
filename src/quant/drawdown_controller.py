@@ -181,9 +181,14 @@ class DrawdownController:
             return 0.0
         return (self.month_start_capital - self.current_capital) / self.month_start_capital
 
-    def evaluate(self, new_capital: float, as_of: Optional[datetime] = None) -> RiskControlState:
+    def evaluate(self, new_capital: float, as_of: Optional[datetime] = None, volatility: float = 0.0) -> RiskControlState:
         """
         更新资金并输出风控状态
+
+        Args:
+            new_capital: 当前净值
+            as_of: 时间戳
+            volatility: 市场波动率（可选，用于预防式风控）
 
         Returns:
             RiskControlState
@@ -234,6 +239,13 @@ class DrawdownController:
         if self._monthly_pause_active(as_of_dt):
             can_trade = False
             reasons.append(f"月度冷却中至{self.monthly_paused_until}")
+
+        # 预防式减仓：基于波动率
+        if volatility > 0.30:
+            vol_scale = 0.5 if volatility > 0.45 else 0.7
+            risk_scale = min(risk_scale, vol_scale)
+            max_total_exposure = min(max_total_exposure, vol_scale + 0.1)
+            reasons.append(f"市场高波动{volatility*100:.1f}%触发预防式减仓")
 
         # 更新暂停状态
         self.is_paused = not can_trade

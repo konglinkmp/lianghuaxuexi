@@ -36,7 +36,8 @@ from .layer_strategy import LayerStrategy, LAYER_AGGRESSIVE, LAYER_CONSERVATIVE
 
 def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
                           use_position_limit: bool = True,
-                          use_layer_strategy: bool = None) -> pd.DataFrame:
+                          use_layer_strategy: bool = None,
+                          ignore_holdings: bool = False) -> pd.DataFrame:
     """
     生成交易计划
     
@@ -45,6 +46,7 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
         verbose: 是否打印进度
         use_position_limit: 是否应用持仓数量限制
         use_layer_strategy: 是否使用分层策略（None表示使用配置文件设置）
+        ignore_holdings: 是否忽略当前持仓（仅分层策略有效）
         
     Returns:
         DataFrame: 交易计划列表
@@ -61,6 +63,7 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
             verbose,
             risk_state=risk_state,
             strength_filter=strength_filter,
+            ignore_holdings=ignore_holdings,
         )
     else:
         plan_df = _generate_single_layer_plan(
@@ -95,7 +98,8 @@ def _attach_style_weights(plan_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _generate_layer_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
-                                 risk_state=None, strength_filter=None) -> pd.DataFrame:
+                                 risk_state=None, strength_filter=None,
+                                 ignore_holdings: bool = False) -> pd.DataFrame:
     """
     使用分层策略生成交易计划
     """
@@ -108,6 +112,7 @@ def _generate_layer_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
         verbose=verbose,
         risk_state=risk_state,
         strength_filter=strength_filter,
+        ignore_holdings=ignore_holdings,
     )
     
     # 格式化为DataFrame

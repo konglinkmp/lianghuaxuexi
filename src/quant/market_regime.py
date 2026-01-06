@@ -95,7 +95,7 @@ class MarketRegimeDetector:
     def __init__(self, lookback_days: int = 60):
         self.lookback = lookback_days
 
-    def detect(self, price_series: pd.Series, volume_series: Optional[pd.Series] = None) -> Tuple[MarketRegime, Dict]:
+    def detect(self, price_series: pd.Series, volume_series: Optional[pd.Series] = None, **kwargs) -> Tuple[MarketRegime, Dict]:
         if price_series is None or len(price_series) < self.lookback:
             return MarketRegime.CONSOLIDATION, {}
 
@@ -117,7 +117,7 @@ class MarketRegimeDetector:
         style_drift = 0.0
         if "benchmark_prices" in kwargs:
             benchmark = kwargs["benchmark_prices"]
-            if len(benchmark) >= 20 and len(price_series) >= 20:
+            if benchmark is not None and len(benchmark) >= 20 and len(price_series) >= 20:
                 bench_return = benchmark.iloc[-20:].pct_change().sum()
                 price_return = price_series.iloc[-20:].pct_change().sum()
                 style_drift = price_return - bench_return

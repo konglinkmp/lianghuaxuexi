@@ -142,8 +142,8 @@ MIN_LIST_YEARS = 2
 ENABLE_TWO_LAYER_STRATEGY = True
 
 # 资金分配
-CONSERVATIVE_CAPITAL_RATIO = 0.70  # 稳健层资金比例
-AGGRESSIVE_CAPITAL_RATIO = 0.30    # 激进层资金比例
+CONSERVATIVE_CAPITAL_RATIO = 0.20  # 稳健层资金比例
+AGGRESSIVE_CAPITAL_RATIO = 0.80    # 激进层资金比例
 
 # 股票分类阈值 - 热门资金股
 HOT_STOCK_MIN_PE = 80              # 热门股最小PE

@@ -15,8 +15,16 @@ cd ~/workspace/量化
 # 2. 激活虚拟环境
 source venv/bin/activate
 
-# 3. 运行主程序
+# 3. 更新账户数据（可选，推荐）
+# 编辑 update_holdings.py 填入最新资金和持仓
+python update_holdings.py
+
+# 4. 运行主程序
+# 正常模式（自动读取持仓和资金）
 PYTHONPATH=src python -m quant.main
+
+# 忽略持仓模式（假设资金充足，查看全量推荐）
+PYTHONPATH=src python -m quant.main --ignore-holdings
 ```
 
 ---

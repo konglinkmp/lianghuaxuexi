@@ -118,6 +118,8 @@ def main():
     parser.add_argument('--auction-output', type=str, default='data/trading_plan_auction.csv',
                         help='竞价过滤输出文件路径')
     
+    parser.add_argument('--ignore-holdings', action='store_true', help='忽略当前持仓（假设资金充足）')
+    
     args = parser.parse_args()
     
     # 打印头部
@@ -192,7 +194,12 @@ def main():
     
     # 根据命令行参数决定是否使用分层策略
     use_layer = not args.no_layer
-    plan = generate_trading_plan(stock_pool, verbose=True, use_layer_strategy=use_layer)
+    plan = generate_trading_plan(
+        stock_pool, 
+        verbose=True,
+        ignore_holdings=args.ignore_holdings, # Added this line
+        use_layer_strategy=use_layer
+    )
     
     # Step 4: 输出结果
     print_trading_plan(plan, market_status=market_status)

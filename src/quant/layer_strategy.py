@@ -12,6 +12,9 @@ from .stock_classifier import (
     LAYER_AGGRESSIVE,
     LAYER_CONSERVATIVE,
 )
+import json
+import os
+from .position_tracker import position_tracker
 from .data_fetcher import get_stock_daily_history, get_stock_industry
 from .strategy import calculate_ma, calculate_atr
 from .risk_control import get_risk_control_state
@@ -53,16 +56,88 @@ class LayerStrategy:
         初始化分层策略
         
         Args:
-            total_capital: 总资金
+            total_capital: 总资金 (默认值，如果 account_status.json 存在则优先使用)
         """
+        self.default_total_capital = total_capital
         self.total_capital = total_capital
         self.conservative_capital = total_capital * CONSERVATIVE_CAPITAL_RATIO
         self.aggressive_capital = total_capital * AGGRESSIVE_CAPITAL_RATIO
+        
+        # 运行时状态
+        self.held_stocks = set()
+        self.conservative_used = 0.0
+        self.aggressive_used = 0.0
+        self.conservative_count = 0
+        self.aggressive_count = 0
+
+    def _load_account_status(self):
+        """加载账户资金状态"""
+        try:
+            if os.path.exists("data/account_status.json"):
+                with open("data/account_status.json", "r", encoding="utf-8") as f:
+                    status = json.load(f)
+                    if "current_capital" in status:
+                        self.total_capital = float(status["current_capital"])
+                        # 重新计算分层资金
+                        self.conservative_capital = self.total_capital * CONSERVATIVE_CAPITAL_RATIO
+                        self.aggressive_capital = self.total_capital * AGGRESSIVE_CAPITAL_RATIO
+                        return True
+        except Exception as e:
+            print(f"[警告] 读取账户状态失败: {e}")
+        return False
+
+    def _load_positions_status(self, stock_pool: pd.DataFrame):
+        """
+        加载持仓状态并计算已用资金
+        需要传入 stock_pool 以便对持仓股票进行分类（判断是稳健层还是激进层）
+        """
+        self.held_stocks = set()
+        self.conservative_used = 0.0
+        self.aggressive_used = 0.0
+        self.conservative_count = 0
+        self.aggressive_count = 0
+        
+        try:
+            if os.path.exists("data/positions.json"):
+                with open("data/positions.json", "r", encoding="utf-8") as f:
+                    positions = json.load(f)
+                    
+                for code, pos in positions.items():
+                    self.held_stocks.add(code)
+                    market_value = pos.get("shares", 0) * pos.get("current_price", 0)
+                    
+                    # 尝试判断持仓股票的类型
+                    # 如果在股票池里，用分类器判断
+                    # 如果不在，默认归为稳健层（保守估计）
+                    layer = LAYER_CONSERVATIVE
+                    
+                    # 简单的分类逻辑：如果有 stock_type 字段则直接用，否则尝试分类
+                    if "stock_type" in pos: # 假设 positions.json 里未来会存这个
+                         if pos["stock_type"] == "HOT_MONEY":
+                             layer = LAYER_AGGRESSIVE
+                    else:
+                        # 尝试从股票池获取信息
+                        # 这里为了简化，我们假设如果它符合激进层特征就是激进层
+                        # 但因为没有历史数据，这里只能做一个近似估计
+                        # 或者我们简单地根据板块判断？
+                        # 最稳妥的方式：默认它是稳健层，占用稳健层额度
+                        pass
+
+                    if layer == LAYER_AGGRESSIVE:
+                        self.aggressive_used += market_value
+                        self.aggressive_count += 1
+                    else:
+                        self.conservative_used += market_value
+                        self.conservative_count += 1
+                        
+        except Exception as e:
+            print(f"[警告] 读取持仓状态失败: {e}")
     
     def generate_layer_signals(self, stock_pool: pd.DataFrame,
                                 verbose: bool = True,
                                 risk_state=None,
-                                strength_filter=None) -> Dict:
+                                strength_filter=None,
+                                ignore_holdings: bool = False) -> Dict:
         """
         为股票池生成分层交易信号
         
@@ -78,6 +153,26 @@ class LayerStrategy:
                     'summary': {统计信息}
                 }
         """
+        # 1. 初始化资金和持仓状态
+        if not ignore_holdings:
+            self._load_account_status()
+            self._load_positions_status(stock_pool)
+            if verbose:
+                print(f"[资金] 总资产: ¥{self.total_capital:,.2f}")
+                print(f"[持仓] 已占用: 稳健层 ¥{self.conservative_used:,.2f} ({self.conservative_count}只) | 激进层 ¥{self.aggressive_used:,.2f} ({self.aggressive_count}只)")
+        else:
+            # 重置为默认状态
+            self.total_capital = self.default_total_capital
+            self.conservative_capital = self.total_capital * CONSERVATIVE_CAPITAL_RATIO
+            self.aggressive_capital = self.total_capital * AGGRESSIVE_CAPITAL_RATIO
+            self.held_stocks = set()
+            self.conservative_used = 0.0
+            self.aggressive_used = 0.0
+            self.conservative_count = 0
+            self.aggressive_count = 0
+            if verbose:
+                print(f"[模式] 忽略持仓，使用默认资金配置: ¥{self.total_capital:,.2f}")
+
         if risk_state is None:
             risk_state = get_risk_control_state(self.total_capital)
 
@@ -111,8 +206,14 @@ class LayerStrategy:
         
         conservative_capital = self.conservative_capital * risk_state.max_total_exposure
         aggressive_capital = self.aggressive_capital * risk_state.max_total_exposure
-        conservative_allocated = 0.0
-        aggressive_allocated = 0.0
+        
+        # 扣除已用资金
+        conservative_allocated = self.conservative_used
+        aggressive_allocated = self.aggressive_used
+        
+        # 扣除已用数量
+        conservative_signals_count = self.conservative_count
+        aggressive_signals_count = self.aggressive_count
 
         for idx, row in stock_pool.iterrows():
             code = row['代码']
@@ -127,6 +228,10 @@ class LayerStrategy:
                 if df is None or df.empty or len(df) < 25:
                     continue
                 
+                # 过滤已持仓
+                if code in self.held_stocks:
+                    continue
+                
                 # 分类股票
                 classification = stock_classifier.classify_stock(code, df)
                 layer = classification['layer']
@@ -136,9 +241,9 @@ class LayerStrategy:
                 if layer not in [LAYER_AGGRESSIVE, LAYER_CONSERVATIVE]:
                     continue
 
-                if layer == LAYER_AGGRESSIVE and len(aggressive_signals) >= AGGRESSIVE_MAX_POSITIONS:
+                if layer == LAYER_AGGRESSIVE and aggressive_signals_count >= AGGRESSIVE_MAX_POSITIONS:
                     continue
-                if layer == LAYER_CONSERVATIVE and len(conservative_signals) >= CONSERVATIVE_MAX_POSITIONS:
+                if layer == LAYER_CONSERVATIVE and conservative_signals_count >= CONSERVATIVE_MAX_POSITIONS:
                     continue
                 
                 # 获取最新价格
@@ -231,15 +336,17 @@ class LayerStrategy:
                 
                 # 分配到对应层
                 if layer == LAYER_AGGRESSIVE:
-                    if len(aggressive_signals) < AGGRESSIVE_MAX_POSITIONS:
+                    if aggressive_signals_count < AGGRESSIVE_MAX_POSITIONS:
                         aggressive_signals.append(signal)
+                        aggressive_signals_count += 1
                 else:
-                    if len(conservative_signals) < CONSERVATIVE_MAX_POSITIONS:
+                    if conservative_signals_count < CONSERVATIVE_MAX_POSITIONS:
                         conservative_signals.append(signal)
+                        conservative_signals_count += 1
                 
                 # 检查是否已达上限
-                if (len(conservative_signals) >= CONSERVATIVE_MAX_POSITIONS and 
-                    len(aggressive_signals) >= AGGRESSIVE_MAX_POSITIONS):
+                if (conservative_signals_count >= CONSERVATIVE_MAX_POSITIONS and 
+                    aggressive_signals_count >= AGGRESSIVE_MAX_POSITIONS):
                     if verbose:
                         print("[分层策略] 两层均已达到最大持仓数，停止分析")
                     break

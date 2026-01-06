@@ -2,7 +2,7 @@
 
 一个基于 Python 的 A 股量化交易决策辅助系统，帮助你筛选股票、生成交易计划、回测策略效果。
 
-✨ **新增分层策略**：将资金分为稳健层（70%）和激进层（30%），自动分类股票并采用差异化风控策略。
+✨ **新增分层策略**：将资金分为稳健层（20%）和激进层（80%），自动分类股票并采用差异化风控策略。
 
 ---
 
@@ -351,7 +351,7 @@ python tools/analyze_stock.py 000547
 | `VOLUME_RATIO_THRESHOLD` | 1.2 | 放量倍数阈值 |
 | `MAX_POSITIONS` | 10 | 最大持仓数量 |
 | `MAX_SECTOR_POSITIONS` | 3 | 同行业最大持仓 |
-| `TOTAL_CAPITAL` | 100000 | 总资金（用于计算仓位） |
+| `TOTAL_CAPITAL` | 64248 | 总资金（用于计算仓位） |
 | `POSITION_RATIO` | 0.10 | 单笔仓位比例（10%） |
 
 ### 风控参数（回撤与风险预算）
@@ -420,8 +420,8 @@ python tools/analyze_stock.py 000547
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `ENABLE_TWO_LAYER_STRATEGY` | True | 分层策略开关 |
-| `CONSERVATIVE_CAPITAL_RATIO` | 0.70 | 稳健层资金比例 |
-| `AGGRESSIVE_CAPITAL_RATIO` | 0.30 | 激进层资金比例 |
+| `CONSERVATIVE_CAPITAL_RATIO` | 0.20 | 稳健层资金比例 |
+| `AGGRESSIVE_CAPITAL_RATIO` | 0.80 | 激进层资金比例 |
 | `CONSERVATIVE_STOP_LOSS` | 0.05 | 稳健层止损-5% |
 | `CONSERVATIVE_TAKE_PROFIT` | 0.15 | 稳健层止盈+15% |
 | `AGGRESSIVE_STOP_LOSS` | 0.08 | 激进层止损-8% |
@@ -463,6 +463,7 @@ python tools/analyze_stock.py 000547
 | `src/quant/basic_filters.py` | 基本面过滤器（PE/PB/上市时间） |
 | `src/quant/market_regime.py` | 市场状态识别（波动率分析） |
 | `src/quant/risk_metrics.py` | 风险指标计算 |
+| `src/quant/fund_control_detector.py` | 资金流向评分器（主力资金活跃度加分） |
 | `update_holdings.py` | 账户数据手动更新脚本 |
 | `outputs/` | 图表/报告输出目录 |
 
@@ -499,7 +500,7 @@ source venv/bin/activate
 | 分层 | 股票类型 | 筛选条件 | 止损 | 止盈 |
 |------|----------|----------|------|------|
 | 💰 稳健层 | 价值趋势股 | PE(0-50) + PB(≤5) + 站上MA20 + 量比≥1.3 | -5% | +15% |
-| 🚀 激进层 | 热门资金股 | (PE>80 & 换手>8%) 或 (动量>25%) 或 (量比>3) 或 热门概念 | -8% | +25% |
+| 🚀 激进层 | 热门资金股 | (PE>80 & 换手>8%) 或 (动量>25%) 或 (量比>3) 或 热门概念 + **资金流向加分** | -8% | +25% |
 
 ### 传统单层策略
 

@@ -63,17 +63,23 @@ def get_all_a_stock_list() -> pd.DataFrame:
     Returns:
         DataFrame: 包含 代码、名称 等字段
     """
+    global _stock_spot_cache
+    
     logger.info("正在获取全A股列表...")
     start_time = time.time()
     
     # 使用东方财富接口获取A股实时行情（包含全部A股）
     df = ak.stock_zh_a_spot_em()
+    
+    # 缓存完整数据（供后续获取 PE/PB 使用）
+    _stock_spot_cache = df.set_index('代码').to_dict('index')
+    
     # 只保留需要的字段
-    df = df[['代码', '名称']].copy()
+    result = df[['代码', '名称']].copy()
     
     elapsed = time.time() - start_time
-    logger.info(f"获取A股列表完成，共 {len(df)} 只股票，耗时 {elapsed:.2f}秒")
-    return df
+    logger.info(f"获取A股列表完成，共 {len(result)} 只股票，耗时 {elapsed:.2f}秒")
+    return result
 
 
 @retry(max_attempts=3, delay=1.0)
@@ -168,6 +174,9 @@ def get_index_daily_history(index_code: str = HS300_CODE, days: int = HISTORY_DA
 # 行业信息缓存
 _industry_cache = {}
 
+# 股票实时数据缓存（包含 PE/PB 等）
+_stock_spot_cache = {}
+
 
 @retry(max_attempts=2, delay=0.5)
 def get_stock_industry(symbol: str) -> str:
@@ -229,6 +238,55 @@ def get_stock_info(symbol: str) -> dict:
         info_dict[row['item']] = row['value']
     
     return info_dict
+
+
+@retry(max_attempts=2, delay=0.5)
+def get_stock_fundamental(symbol: str) -> dict:
+    """
+    获取股票基本面数据（市盈率、市净率、上市日期）
+    
+    优先从缓存读取 PE/PB（由 get_all_a_stock_list 预加载），
+    上市日期从 stock_individual_info_em 获取。
+    
+    Args:
+        symbol: 股票代码
+        
+    Returns:
+        dict: {'pe': float, 'pb': float, 'list_date': str}
+              获取失败的字段值为 None
+    """
+    global _stock_spot_cache
+    
+    result = {'pe': None, 'pb': None, 'list_date': None}
+    
+    # 优先从缓存获取 PE/PB
+    if symbol in _stock_spot_cache:
+        spot_data = _stock_spot_cache[symbol]
+        try:
+            pe_val = spot_data.get('市盈率-动态')
+            if pe_val is not None and pe_val != '-' and not pd.isna(pe_val):
+                result['pe'] = float(pe_val)
+        except (ValueError, TypeError):
+            pass
+        try:
+            pb_val = spot_data.get('市净率')
+            if pb_val is not None and pb_val != '-' and not pd.isna(pb_val):
+                result['pb'] = float(pb_val)
+        except (ValueError, TypeError):
+            pass
+    
+    # 获取上市日期（需要调用 API）
+    try:
+        df = ak.stock_individual_info_em(symbol=symbol)
+        if not df.empty:
+            for _, row in df.iterrows():
+                if row['item'] == '上市时间':
+                    result['list_date'] = str(row['value']) if row['value'] else None
+                    break
+    except Exception as e:
+        logger.warning(f"获取 {symbol} 上市日期失败: {e}")
+    
+    return result
 
 
 if __name__ == "__main__":

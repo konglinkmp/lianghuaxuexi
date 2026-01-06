@@ -7,6 +7,7 @@ import os
 import pandas as pd
 from datetime import datetime
 from .data_fetcher import get_stock_daily_history, get_stock_industry
+from .basic_filters import check_fundamental
 from .strategy import (
     check_buy_signal,
     calculate_stop_loss,
@@ -71,6 +72,13 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
             
             # 检查买入信号
             if not check_buy_signal(df):
+                continue
+            
+            # 检查基本面
+            passed, reason = check_fundamental(code)
+            if not passed:
+                if verbose:
+                    print(f"[基本面] {name}({code}) 不符合: {reason}")
                 continue
             
             # 检查是否已持有

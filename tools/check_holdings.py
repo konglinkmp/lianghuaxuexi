@@ -45,8 +45,7 @@ def load_holdings():
         {"code": "159813", "name": "半导体 ETF", "type": "etf"},
         {"code": "588060", "name": "科创 50 ETF", "type": "etf"},
         {"code": "000547", "name": "航天发展", "type": "stock"},
-        {"code": "588760", "name": "科创人工智能 ETF", "type": "etf"},
-        {"code": "002352", "name": "顺丰控股", "type": "stock"}
+        {"code": "588760", "name": "科创人工智能 ETF", "type": "etf"}
     ]
 
 def main():

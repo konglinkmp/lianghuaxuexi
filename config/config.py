@@ -53,3 +53,13 @@ MAX_SECTOR_POSITIONS = 3
 
 # 持仓记录文件
 POSITION_FILE = "data/positions.json"
+
+# ============ 基本面筛选 ============
+# 最大市盈率（剔除过高估值）
+MAX_PE = 50
+
+# 最大市净率（避免过度泡沫）
+MAX_PB = 5
+
+# 最小上市年限（避开次新股）
+MIN_LIST_YEARS = 2

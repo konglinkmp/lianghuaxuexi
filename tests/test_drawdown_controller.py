@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-from quant.drawdown_controller import DrawdownController
+from quant.risk.drawdown_controller import DrawdownController
 
 
 def test_drawdown_soft_and_hard(tmp_path):

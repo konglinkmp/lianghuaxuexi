@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-from quant.style_benchmark import compute_style_weights
+from quant.strategy.style_benchmark import compute_style_weights
 
 
 def test_compute_style_weights():

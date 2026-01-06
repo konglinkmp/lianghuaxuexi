@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-from quant.risk_positioning import calculate_position_size
+from quant.risk.risk_positioning import calculate_position_size
 
 
 def test_calculate_position_size_basic():

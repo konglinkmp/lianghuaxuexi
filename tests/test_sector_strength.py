@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-from quant.sector_strength import SectorStrengthFilter
+from quant.strategy.sector_strength import SectorStrengthFilter
 
 
 def test_sector_strength_filter_require_both():

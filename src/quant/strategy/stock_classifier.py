@@ -15,6 +15,7 @@ from ..core.data_fetcher import (
 )
 from .fund_control_detector import get_fund_flow_score
 from .strategy import calculate_ma
+from .technical_indicators import get_macd_score
 from config.config import (
     HOT_STOCK_MIN_PE,
     HOT_STOCK_MIN_TURNOVER,
@@ -192,6 +193,12 @@ class StockClassifier:
             score += fund_score
             result['reasons'].append(f'资金流向活跃+{fund_score:.0f}分')
         
+        # 条件6：MACD技术指标加分
+        macd_score, macd_reasons = get_macd_score(df)
+        if macd_score > 0:
+            score += macd_score
+        result['reasons'].extend(macd_reasons)
+        
         # 任一条件满足且分数达标即为热门资金股
         if score >= 20:
             result['is_hot'] = True
@@ -264,6 +271,18 @@ class StockClassifier:
         else:
             result['reasons'].append(f'成交量不足({volume_ratio:.1f}倍)')
             return result
+        
+        # 条件5（辅助加分）：MACD金叉确认趋势
+        macd_score, macd_reasons = get_macd_score(df)
+        if macd_score > 0:
+            # 价值趋势股的MACD加分减半（辅助作用）
+            bonus = min(macd_score * 0.5, 15)
+            score += bonus
+            result['reasons'].append(f'MACD趋势确认+{bonus:.0f}分')
+        # 记录MACD风险提示（但不影响分数）
+        for reason in macd_reasons:
+            if '⚠️' in reason:
+                result['reasons'].append(reason)
         
         # 所有条件都满足
         if conditions_met >= 4:

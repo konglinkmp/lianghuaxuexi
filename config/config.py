@@ -176,3 +176,14 @@ HOT_CONCEPTS_FILE = "data/hot_concepts.txt"
 
 # ============ 数据库配置 ============
 DB_PATH = "data/stock_data.db"
+
+# ============ MACD技术指标配置 ============
+MACD_FAST_PERIOD = 12         # 快线周期
+MACD_SLOW_PERIOD = 26         # 慢线周期
+MACD_SIGNAL_PERIOD = 9        # 信号线周期
+MACD_CROSS_LOOKBACK = 3       # 金叉/死叉检测回溯天数
+MACD_DIVERGENCE_LOOKBACK = 20 # 背离检测回溯天数
+MACD_GOLDEN_CROSS_SCORE = 15  # 金叉加分
+MACD_DIVERGENCE_SCORE = 20    # 背离加分
+MACD_ZERO_AXIS_SCORE = 5      # DIF/DEA零轴之上加分
+

@@ -5,7 +5,7 @@ import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 
-from quant.auction_filter import apply_auction_filters
+from quant.strategy.auction_filter import apply_auction_filters
 
 
 def test_auction_filter_cancel_on_gap():

@@ -13,6 +13,7 @@ from .data_fetcher import (
     calculate_momentum,
     calculate_volume_ratio,
 )
+from .fund_control_detector import get_fund_flow_score
 from .strategy import calculate_ma
 from config.config import (
     HOT_STOCK_MIN_PE,
@@ -184,6 +185,12 @@ class StockClassifier:
         if self._check_hot_concept(symbol):
             score += 20
             result['reasons'].append('属于热门概念板块')
+        
+        # 条件5：资金流向加分（主力资金活跃）
+        fund_score = get_fund_flow_score(symbol, df)
+        if fund_score > 0:
+            score += fund_score
+            result['reasons'].append(f'资金流向活跃+{fund_score:.0f}分')
         
         # 任一条件满足且分数达标即为热门资金股
         if score >= 20:

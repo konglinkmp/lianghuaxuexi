@@ -13,6 +13,7 @@ import urllib3
 from datetime import datetime, timedelta
 from functools import wraps
 from config.config import HISTORY_DAYS, HS300_CODE
+from .data_manager import data_manager
 
 # 禁用 SSL 警告和验证（解决网络连接问题）
 warnings.filterwarnings('ignore', category=urllib3.exceptions.InsecureRequestWarning)
@@ -75,8 +76,19 @@ def get_all_a_stock_list() -> pd.DataFrame:
     _stock_spot_cache = df.set_index('代码').to_dict('index')
     
     # 只保留需要的字段
-    result = df[['代码', '名称']].copy()
+    # 注意：akshare返回的列名可能是 '总市值'
+    result = df[['代码', '名称', '总市值']].copy()
     
+    # 保存到本地数据库
+    try:
+        # 补充一些字段以便保存
+        save_df = result.copy()
+        save_df = save_df.rename(columns={'代码': 'code', '名称': 'name'})
+        data_manager.save_stock_meta(save_df)
+        logger.info(f"已缓存 {len(save_df)} 条股票基础信息到本地数据库")
+    except Exception as e:
+        logger.warning(f"保存股票列表到数据库失败: {e}")
+
     elapsed = time.time() - start_time
     logger.info(f"获取A股列表完成，共 {len(result)} 只股票，耗时 {elapsed:.2f}秒")
     return result
@@ -94,38 +106,71 @@ def get_stock_daily_history(symbol: str, days: int = HISTORY_DAYS) -> pd.DataFra
     Returns:
         DataFrame: 包含 日期、开盘、收盘、最高、最低、成交量 等字段
     """
-    # 计算起止日期（使用昨天作为结束日期，避免边界问题）
-    end_date = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
-    start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
+    # 计算目标结束日期（昨天）
+    target_end_date = (datetime.now() - timedelta(days=1)).date()
+    target_end_str = target_end_date.strftime('%Y%m%d')
     
-    # 使用东方财富接口获取历史数据
-    df = ak.stock_zh_a_hist(
-        symbol=symbol,
-        period="daily",
-        start_date=start_date,
-        end_date=end_date,
-        adjust="qfq"  # 前复权
-    )
+    # 1. 检查本地最新日期
+    latest_date_str = data_manager.get_latest_date(symbol)
+    
+    need_fetch = False
+    fetch_start_date = None
+    
+    if latest_date_str:
+        latest_date = datetime.strptime(latest_date_str.split()[0], '%Y-%m-%d').date()
+        if latest_date < target_end_date:
+            # 需要增量更新
+            need_fetch = True
+            fetch_start_date = (latest_date + timedelta(days=1)).strftime('%Y%m%d')
+    else:
+        # 无本地数据，全量获取
+        need_fetch = True
+        fetch_start_date = (datetime.now() - timedelta(days=days)).strftime('%Y%m%d')
+
+    # 2. 如果需要，从接口获取并保存
+    if need_fetch:
+        try:
+            logger.info(f"[{symbol}] 正在更新数据: {fetch_start_date} -> {target_end_str}")
+            df_remote = ak.stock_zh_a_hist(
+                symbol=symbol,
+                period="daily",
+                start_date=fetch_start_date,
+                end_date=target_end_str,
+                adjust="qfq"
+            )
+            
+            if not df_remote.empty:
+                # 重命名列
+                df_remote = df_remote.rename(columns={
+                    '日期': 'date',
+                    '开盘': 'open',
+                    '收盘': 'close',
+                    '最高': 'high',
+                    '最低': 'low',
+                    '成交量': 'volume',
+                    '成交额': 'amount'
+                })
+                # 确保日期格式
+                df_remote['date'] = pd.to_datetime(df_remote['date'])
+                
+                # 保存到数据库
+                data_manager.save_stock_daily(symbol, df_remote)
+                logger.debug(f"[{symbol}] 已保存 {len(df_remote)} 条新记录")
+            else:
+                logger.debug(f"[{symbol}] 接口未返回数据")
+                
+        except Exception as e:
+            logger.warning(f"[{symbol}] 获取远程数据失败: {e}")
+
+    # 3. 从本地数据库读取（只取最近 days 天）
+    # 计算读取的起始日期
+    read_start_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+    df = data_manager.get_stock_daily(symbol, start_date=read_start_date)
     
     if df.empty:
-        logger.warning(f"{symbol} 返回空数据")
+        logger.warning(f"[{symbol}] 本地无数据且远程获取失败")
         return pd.DataFrame()
-    
-    # 重命名列以便统一处理
-    df = df.rename(columns={
-        '日期': 'date',
-        '开盘': 'open',
-        '收盘': 'close',
-        '最高': 'high',
-        '最低': 'low',
-        '成交量': 'volume',
-        '成交额': 'amount'
-    })
-    
-    # 确保日期为datetime类型
-    df['date'] = pd.to_datetime(df['date'])
-    df = df.sort_values('date').reset_index(drop=True)
-    
+        
     return df
 
 
@@ -294,6 +339,10 @@ def get_stock_fundamental(symbol: str) -> dict:
 
 # 概念板块缓存
 _concept_cache = {}
+
+# 龙虎榜缓存
+_longhu_cache = {}
+_longhu_cache_date = None
 
 
 def get_stock_turnover_rate(symbol: str) -> float:

@@ -173,3 +173,6 @@ AGGRESSIVE_MAX_HOLDING_DAYS = 10   # 激进层最大持仓天数
 
 # 热门概念配置文件
 HOT_CONCEPTS_FILE = "data/hot_concepts.txt"
+
+# ============ 数据库配置 ============
+DB_PATH = "data/stock_data.db"

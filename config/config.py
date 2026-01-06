@@ -27,7 +27,35 @@ TRAILING_STOP_RATIO = 0.08  # 8%
 POSITION_RATIO = 0.10  # 10%
 
 # 总资金（用于计算建议仓位金额，可自行修改）
-TOTAL_CAPITAL = 100000  # 10万
+TOTAL_CAPITAL = 64248  # 6.4万
+
+# ============ 风控参数（v1.0） ============
+# 总回撤控制
+MAX_DRAWDOWN_HARD = 0.20        # 总回撤硬线（20%）
+DRAWDOWN_REDUCE_LEVEL_1 = 0.12  # 降仓线1（12%）
+DRAWDOWN_REDUCE_LEVEL_2 = 0.16  # 降仓线2（16%）
+DRAWDOWN_REDUCE_TARGET_L1 = 0.60  # 触发线1后总仓位上限
+DRAWDOWN_REDUCE_TARGET_L2 = 0.30  # 触发线2后总仓位上限
+
+# 月度回撤控制
+MONTHLY_DRAWDOWN_SOFT = 0.08    # 月度软线（8%）
+MONTHLY_DRAWDOWN_HARD = 0.12    # 月度硬线（12%）
+MONTHLY_RISK_SCALE = 0.50       # 触发软线后风险预算缩放
+MONTHLY_COOLDOWN_DAYS = 5       # 月度硬线触发后冷却天数
+
+# 风险预算与仓位上限
+ENABLE_RISK_BUDGET = True
+RISK_BUDGET_CONSERVATIVE = 0.0030  # 单笔风险预算（稳健层）0.30%
+RISK_BUDGET_AGGRESSIVE = 0.0050    # 单笔风险预算（激进层）0.50%
+RISK_BUDGET_DEFAULT = 0.0030       # 单层策略默认风险预算
+
+# 单票与流动性限制
+MAX_SINGLE_POSITION_RATIO = 0.40   # 单票最大仓位（占总资金）
+RISK_CONTRIBUTION_LIMIT = 0.25     # 单票风险贡献上限（占组合风险预算）
+LIQUIDITY_ADV_LIMIT = 0.05         # 单票仓位不超过20日成交额的5%
+
+# 回撤控制开关（需配合账户净值输入）
+ENABLE_DRAWDOWN_CONTROL = True
 
 # ============ 数据配置 ============
 # 历史数据获取天数（需足够计算均线）

@@ -239,6 +239,17 @@ drawdown_controller.print_status()
 "
 ```
 
+也可以使用净值文件让主程序自动读取：
+
+示例文件（`data/account_status.json`）：
+
+```json
+{
+  "current_capital": 95000,
+  "as_of": "2026-01-06"
+}
+```
+
 ---
 
 ### 场景七：配置消息推送（钉钉/微信）
@@ -306,6 +317,24 @@ python tools/analyze_stock.py 000547
 | `TOTAL_CAPITAL` | 100000 | 总资金（用于计算仓位） |
 | `POSITION_RATIO` | 0.10 | 单笔仓位比例（10%） |
 
+### 风控参数（回撤与风险预算）
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `MAX_DRAWDOWN_HARD` | 0.20 | 总回撤硬线 |
+| `DRAWDOWN_REDUCE_LEVEL_1` | 0.12 | 降仓线1 |
+| `DRAWDOWN_REDUCE_LEVEL_2` | 0.16 | 降仓线2 |
+| `DRAWDOWN_REDUCE_TARGET_L1` | 0.60 | 触发线1后总仓位上限 |
+| `DRAWDOWN_REDUCE_TARGET_L2` | 0.30 | 触发线2后总仓位上限 |
+| `MONTHLY_DRAWDOWN_SOFT` | 0.08 | 月度软线 |
+| `MONTHLY_DRAWDOWN_HARD` | 0.12 | 月度硬线 |
+| `MONTHLY_RISK_SCALE` | 0.50 | 触发软线后风险预算缩放 |
+| `RISK_BUDGET_CONSERVATIVE` | 0.0030 | 稳健层单笔风险预算 |
+| `RISK_BUDGET_AGGRESSIVE` | 0.0050 | 激进层单笔风险预算 |
+| `MAX_SINGLE_POSITION_RATIO` | 0.40 | 单票最大仓位 |
+| `RISK_CONTRIBUTION_LIMIT` | 0.25 | 单票风险贡献上限 |
+| `LIQUIDITY_ADV_LIMIT` | 0.05 | 单票仓位不超过20日成交额的5% |
+
 ### 分层策略参数
 
 | 参数 | 默认值 | 说明 |
@@ -336,6 +365,8 @@ python tools/analyze_stock.py 000547
 | `src/quant/transaction_cost.py` | 交易成本模型 |
 | `src/quant/position_tracker.py` | 持仓跟踪 |
 | `src/quant/drawdown_controller.py` | 回撤控制 |
+| `src/quant/risk_control.py` | 风控状态读取 |
+| `src/quant/risk_positioning.py` | 风险预算仓位计算 |
 | `src/quant/visualizer.py` | 可视化报告 |
 | `src/quant/notifier.py` | 消息推送 |
 | `data/myshare.txt` | 自选股票池 |

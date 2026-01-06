@@ -14,6 +14,8 @@ from .stock_classifier import (
 )
 from .data_fetcher import get_stock_daily_history, get_stock_industry
 from .strategy import calculate_ma, calculate_atr
+from .risk_control import get_risk_control_state
+from .risk_positioning import calculate_position_size, estimate_adv_amount
 from config.config import (
     TOTAL_CAPITAL,
     CONSERVATIVE_CAPITAL_RATIO,
@@ -28,6 +30,11 @@ from config.config import (
     AGGRESSIVE_TRAILING_STOP,
     AGGRESSIVE_MAX_POSITIONS,
     AGGRESSIVE_POSITION_RATIO,
+    RISK_BUDGET_CONSERVATIVE,
+    RISK_BUDGET_AGGRESSIVE,
+    MAX_SINGLE_POSITION_RATIO,
+    RISK_CONTRIBUTION_LIMIT,
+    LIQUIDITY_ADV_LIMIT,
 )
 
 
@@ -51,8 +58,9 @@ class LayerStrategy:
         self.conservative_capital = total_capital * CONSERVATIVE_CAPITAL_RATIO
         self.aggressive_capital = total_capital * AGGRESSIVE_CAPITAL_RATIO
     
-    def generate_layer_signals(self, stock_pool: pd.DataFrame, 
-                                verbose: bool = True) -> Dict:
+    def generate_layer_signals(self, stock_pool: pd.DataFrame,
+                                verbose: bool = True,
+                                risk_state=None) -> Dict:
         """
         为股票池生成分层交易信号
         
@@ -68,7 +76,30 @@ class LayerStrategy:
                     'summary': {统计信息}
                 }
         """
+        if risk_state is None:
+            risk_state = get_risk_control_state(self.total_capital)
+
+        if not risk_state.can_trade:
+            if verbose:
+                print(f"[风控] {risk_state.summary()}")
+                print("⛔ 风控限制：暂停新开仓")
+            return {
+                "conservative": [],
+                "aggressive": [],
+                "summary": {
+                    "conservative_count": 0,
+                    "aggressive_count": 0,
+                    "conservative_max": CONSERVATIVE_MAX_POSITIONS,
+                    "aggressive_max": AGGRESSIVE_MAX_POSITIONS,
+                    "conservative_capital": self.conservative_capital,
+                    "aggressive_capital": self.aggressive_capital,
+                    "total_signals": 0,
+                    "risk_state": risk_state.summary(),
+                },
+            }
+
         if verbose:
+            print(f"[风控] {risk_state.summary()}")
             print(f"\n[分层策略] 资金分配: 稳健层 ¥{self.conservative_capital:,.0f} | 激进层 ¥{self.aggressive_capital:,.0f}")
         
         conservative_signals = []
@@ -76,6 +107,11 @@ class LayerStrategy:
         
         total = len(stock_pool)
         
+        conservative_capital = self.conservative_capital * risk_state.max_total_exposure
+        aggressive_capital = self.aggressive_capital * risk_state.max_total_exposure
+        conservative_allocated = 0.0
+        aggressive_allocated = 0.0
+
         for idx, row in stock_pool.iterrows():
             code = row['代码']
             name = row['名称']
@@ -93,9 +129,14 @@ class LayerStrategy:
                 classification = stock_classifier.classify_stock(code, df)
                 layer = classification['layer']
                 stock_type = classification['type']
-                
+
                 # 跳过普通股
                 if layer not in [LAYER_AGGRESSIVE, LAYER_CONSERVATIVE]:
+                    continue
+
+                if layer == LAYER_AGGRESSIVE and len(aggressive_signals) >= AGGRESSIVE_MAX_POSITIONS:
+                    continue
+                if layer == LAYER_CONSERVATIVE and len(conservative_signals) >= CONSERVATIVE_MAX_POSITIONS:
                     continue
                 
                 # 获取最新价格
@@ -115,9 +156,42 @@ class LayerStrategy:
                 stop_loss_price = round(close_price * (1 - layer_params['stop_loss']), 2)
                 take_profit_price = round(close_price * (1 + layer_params['take_profit']), 2)
                 
-                # 计算建议仓位
-                position_size = self._calculate_position_size(layer, close_price)
+                # 计算建议仓位（风险预算）
+                layer_max_positions = layer_params['max_positions']
+                risk_budget_ratio = (
+                    RISK_BUDGET_AGGRESSIVE if layer == LAYER_AGGRESSIVE else RISK_BUDGET_CONSERVATIVE
+                )
+                remaining_capital = (
+                    aggressive_capital - aggressive_allocated
+                    if layer == LAYER_AGGRESSIVE
+                    else conservative_capital - conservative_allocated
+                )
+                if remaining_capital <= 0:
+                    continue
+
+                adv_amount = estimate_adv_amount(df, close_price)
+                size_result = calculate_position_size(
+                    price=close_price,
+                    stop_loss=stop_loss_price,
+                    total_capital=self.total_capital,
+                    risk_budget_ratio=risk_budget_ratio,
+                    risk_scale=risk_state.risk_scale,
+                    max_position_ratio=MAX_SINGLE_POSITION_RATIO,
+                    max_positions=layer_max_positions,
+                    adv_amount=adv_amount,
+                    liquidity_limit=LIQUIDITY_ADV_LIMIT,
+                    risk_contribution_limit=RISK_CONTRIBUTION_LIMIT,
+                    remaining_capital=remaining_capital,
+                )
+                position_size = size_result.shares
+                if position_size < 100:
+                    continue
                 position_amount = position_size * close_price
+
+                if layer == LAYER_AGGRESSIVE:
+                    aggressive_allocated += position_amount
+                else:
+                    conservative_allocated += position_amount
                 
                 # 构建信号
                 signal = {
@@ -133,7 +207,7 @@ class LayerStrategy:
                     'MA20': round(ma20, 2),
                     '建议股数': position_size,
                     '建议金额': round(position_amount, 2),
-                    '仓位比例': f"{layer_params['position_ratio'] * 100:.0f}%",
+                    '仓位比例': f"{position_amount / self.total_capital * 100:.1f}%",
                     'score': classification['score'],
                     'reasons': '; '.join(classification['reasons'][:2])  # 只保留前2个原因
                 }
@@ -170,7 +244,8 @@ class LayerStrategy:
             'aggressive_max': AGGRESSIVE_MAX_POSITIONS,
             'conservative_capital': self.conservative_capital,
             'aggressive_capital': self.aggressive_capital,
-            'total_signals': len(conservative_signals) + len(aggressive_signals)
+            'total_signals': len(conservative_signals) + len(aggressive_signals),
+            'risk_state': risk_state.summary(),
         }
         
         return {
@@ -178,33 +253,6 @@ class LayerStrategy:
             'aggressive': aggressive_signals,
             'summary': summary
         }
-    
-    def _calculate_position_size(self, layer: str, price: float) -> int:
-        """
-        根据分层计算建议股数
-        
-        Args:
-            layer: 分层类型 AGGRESSIVE/CONSERVATIVE
-            price: 股票价格
-            
-        Returns:
-            int: 建议股数（100的整数倍）
-        """
-        if layer == LAYER_AGGRESSIVE:
-            capital = self.aggressive_capital
-            position_ratio = AGGRESSIVE_POSITION_RATIO
-        else:
-            capital = self.conservative_capital
-            position_ratio = CONSERVATIVE_POSITION_RATIO
-        
-        # 计算单笔仓位金额
-        position_amount = capital * position_ratio
-        
-        # 计算股数（向下取整到100股）
-        shares = int(position_amount / price / 100) * 100
-        
-        # 至少100股
-        return max(shares, 100)
     
     def _get_layer_parameters(self, layer: str) -> Dict:
         """

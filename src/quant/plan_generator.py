@@ -16,8 +16,14 @@ from .strategy import (
     get_latest_ma20,
 )
 from .market_regime import adaptive_strategy
+from .risk_control import get_risk_control_state
+from .risk_positioning import calculate_position_size, estimate_adv_amount
 from config.config import (
-    POSITION_RATIO, TOTAL_CAPITAL, OUTPUT_CSV, MAX_POSITIONS,
+    TOTAL_CAPITAL, OUTPUT_CSV, MAX_POSITIONS,
+    RISK_BUDGET_DEFAULT,
+    MAX_SINGLE_POSITION_RATIO,
+    RISK_CONTRIBUTION_LIMIT,
+    LIQUIDITY_ADV_LIMIT,
     ENABLE_TWO_LAYER_STRATEGY,
     CONSERVATIVE_STOP_LOSS, CONSERVATIVE_TAKE_PROFIT, CONSERVATIVE_MAX_POSITIONS,
     AGGRESSIVE_STOP_LOSS, AGGRESSIVE_TAKE_PROFIT, AGGRESSIVE_MAX_POSITIONS,
@@ -44,13 +50,16 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
     # 判断是否使用分层策略
     enable_layer = use_layer_strategy if use_layer_strategy is not None else ENABLE_TWO_LAYER_STRATEGY
     
+    risk_state = get_risk_control_state(TOTAL_CAPITAL)
+
     if enable_layer:
-        return _generate_layer_trading_plan(stock_pool, verbose)
+        return _generate_layer_trading_plan(stock_pool, verbose, risk_state=risk_state)
     else:
-        return _generate_single_layer_plan(stock_pool, verbose, use_position_limit)
+        return _generate_single_layer_plan(stock_pool, verbose, use_position_limit, risk_state=risk_state)
 
 
-def _generate_layer_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True) -> pd.DataFrame:
+def _generate_layer_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
+                                 risk_state=None) -> pd.DataFrame:
     """
     使用分层策略生成交易计划
     """
@@ -58,24 +67,36 @@ def _generate_layer_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True)
         print("\n🔄 使用分层策略（稳健层+激进层）")
     
     strategy = LayerStrategy(TOTAL_CAPITAL)
-    layer_signals = strategy.generate_layer_signals(stock_pool, verbose=verbose)
+    layer_signals = strategy.generate_layer_signals(stock_pool, verbose=verbose, risk_state=risk_state)
     
     # 格式化为DataFrame
     return strategy.format_layer_plans(layer_signals)
 
 
 def _generate_single_layer_plan(stock_pool: pd.DataFrame, verbose: bool = True,
-                                 use_position_limit: bool = True) -> pd.DataFrame:
+                                 use_position_limit: bool = True,
+                                 risk_state=None) -> pd.DataFrame:
     """
     使用单层策略生成交易计划（原有逻辑）
     """
     if verbose:
         print("\n🔄 使用单层策略（传统模式）")
+    if risk_state is None:
+        risk_state = get_risk_control_state(TOTAL_CAPITAL)
+
+    if not risk_state.can_trade:
+        if verbose:
+            print(f"[风控] {risk_state.summary()}")
+            print("⛔ 风控限制：暂停新开仓")
+        return pd.DataFrame()
+
+    if verbose and risk_state.reasons:
+        print(f"[风控] {risk_state.summary()}")
+
     plans = []
     total = len(stock_pool)
-    
+
     params = adaptive_strategy.get_current_params()
-    position_ratio = params.position_ratio or POSITION_RATIO
     max_positions = params.max_positions or MAX_POSITIONS
 
     # 同步到持仓管理器（保持限制一致）
@@ -88,6 +109,9 @@ def _generate_single_layer_plan(stock_pool: pd.DataFrame, verbose: bool = True,
     if verbose and use_position_limit:
         print(f"[持仓] 当前持仓 {current_positions}/{max_positions}，还可买入 {remaining_slots} 只")
     
+    max_capital = TOTAL_CAPITAL * risk_state.max_total_exposure
+    allocated_capital = 0.0
+
     for idx, row in stock_pool.iterrows():
         code = row['代码']
         name = row['名称']
@@ -137,14 +161,35 @@ def _generate_single_layer_plan(stock_pool: pd.DataFrame, verbose: bool = True,
             stop_loss = calculate_stop_loss(close_price, ma20, df)
             take_profit = calculate_take_profit(close_price)
             
-            # 计算建议仓位金额
-            position_amount = TOTAL_CAPITAL * position_ratio
-            
-            # 计算建议股数（A股一手100股）
-            suggested_shares = int(position_amount / close_price / 100) * 100
+            remaining_capital = max_capital - allocated_capital
+            if remaining_capital <= 0:
+                if verbose:
+                    print("[风控] 已达到总仓位上限，停止推荐")
+                break
+
+            adv_amount = estimate_adv_amount(df, close_price)
+            size_result = calculate_position_size(
+                price=close_price,
+                stop_loss=stop_loss,
+                total_capital=TOTAL_CAPITAL,
+                risk_budget_ratio=RISK_BUDGET_DEFAULT,
+                risk_scale=risk_state.risk_scale,
+                max_position_ratio=MAX_SINGLE_POSITION_RATIO,
+                max_positions=max_positions,
+                adv_amount=adv_amount,
+                liquidity_limit=LIQUIDITY_ADV_LIMIT,
+                risk_contribution_limit=RISK_CONTRIBUTION_LIMIT,
+                remaining_capital=remaining_capital,
+            )
+
+            suggested_shares = size_result.shares
             if suggested_shares < 100:
-                suggested_shares = 100
-            
+                continue
+
+            position_amount = suggested_shares * close_price
+            allocated_capital += position_amount
+            actual_position_ratio = position_amount / TOTAL_CAPITAL
+
             # 获取板块信息
             industry = get_stock_industry(code)
             
@@ -158,8 +203,8 @@ def _generate_single_layer_plan(stock_pool: pd.DataFrame, verbose: bool = True,
                 '止盈价': round(take_profit, 2),
                 'MA20': round(ma20, 2),
                 '建议股数': suggested_shares,
-                '建议金额': round(suggested_shares * close_price, 2),
-                '仓位比例': f"{position_ratio * 100:.0f}%"
+                '建议金额': round(position_amount, 2),
+                '仓位比例': f"{actual_position_ratio * 100:.1f}%"
             })
             
         except Exception as e:

@@ -4,8 +4,11 @@
 """
 
 import os
-from typing import Dict, List, Set
 import pandas as pd
+import numpy as np
+from typing import Dict, List, Optional, Tuple, Set
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from ..core.data_fetcher import (
     get_stock_fundamental,
     get_stock_turnover_rate,
@@ -311,13 +314,15 @@ class StockClassifier:
         
         return False
     
-    def batch_classify(self, stock_pool: pd.DataFrame, verbose: bool = False) -> pd.DataFrame:
+    def batch_classify(self, stock_pool: pd.DataFrame, verbose: bool = False, parallel: bool = True, max_workers: int = 10) -> pd.DataFrame:
         """
         批量分类股票池
         
         Args:
             stock_pool: 股票池DataFrame，需包含 代码、名称 列
             verbose: 是否打印进度
+            parallel: 是否开启并行处理
+            max_workers: 最大并行线程数
             
         Returns:
             DataFrame: 带有分类结果的股票池
@@ -327,41 +332,59 @@ class StockClassifier:
         results = []
         total = len(stock_pool)
         
-        for idx, row in stock_pool.iterrows():
-            code = row['代码']
-            name = row['名称']
-            
-            if verbose and (idx + 1) % 50 == 0:
-                print(f"[分类进度] {idx + 1}/{total} ({(idx+1)/total*100:.1f}%)")
-            
+        if verbose:
+            print(f"🚀 开始批量分析 {total} 只股票 (并行: {parallel}, 线程数: {max_workers})...")
+
+        def _process_single_stock(row_data):
+            code = row_data['代码']
+            name = row_data['名称']
             try:
                 # 获取历史数据
                 df = get_stock_daily_history(code)
-                
                 # 分类
                 classification = self.classify_stock(code, df)
-                
-                results.append({
-                    '代码': code,
-                    '名称': name,
-                    'stock_type': classification['type'],
-                    'layer': classification['layer'],
-                    'score': classification['score'],
-                    'reasons': '; '.join(classification['reasons'])
-                })
+                classification.update({'代码': code, '名称': name})
+                return classification
             except Exception as e:
-                if verbose:
-                    print(f"[警告] 分类 {code} 失败: {e}")
-                results.append({
-                    '代码': code,
-                    '名称': name,
-                    'stock_type': STOCK_TYPE_NORMAL,
-                    'layer': LAYER_NONE,
-                    'score': 0.0,
-                    'reasons': f'分类失败: {e}'
-                })
+                return {'代码': code, '名称': name, 'is_hot': False, 'is_value': False, 'score': 0, 'reasons': [f"分析失败: {str(e)}"]}
+
+        if parallel and total > 1:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_stock = {executor.submit(_process_single_stock, row): row for _, row in stock_pool.iterrows()}
+                
+                count = 0
+                for future in as_completed(future_to_stock):
+                    res = future.result()
+                    results.append(res)
+                    count += 1
+                    if verbose and count % 50 == 0:
+                        print(f"[分类进度] {count}/{total} ({count/total*100:.1f}%)")
+        else:
+            for idx, row in stock_pool.iterrows():
+                res = _process_single_stock(row)
+                results.append(res)
+                if verbose and (idx + 1) % 50 == 0:
+                    print(f"[分类进度] {idx + 1}/{total} ({(idx+1)/total*100:.1f}%)")
         
-        return pd.DataFrame(results)
+        # 转换为 DataFrame 并整理列名
+        df_results = pd.DataFrame(results)
+        if not df_results.empty:
+            # 确保包含必要的列
+            column_map = {
+                'type': 'stock_type',
+                'layer': 'layer',
+                'score': 'score',
+                'reasons': 'reasons'
+            }
+            for old_col, new_col in column_map.items():
+                if old_col in df_results.columns:
+                    df_results = df_results.rename(columns={old_col: new_col})
+            
+            # 格式化 reasons
+            if 'reasons' in df_results.columns:
+                df_results['reasons'] = df_results['reasons'].apply(lambda x: '; '.join(x) if isinstance(x, list) else x)
+
+        return df_results
 
 
 # 创建全局分类器实例

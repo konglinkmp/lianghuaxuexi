@@ -219,71 +219,56 @@ def get_index_daily_history(index_code: str = HS300_CODE, days: int = HISTORY_DA
 # 行业信息缓存
 _industry_cache = {}
 
+# 个股详细信息缓存 (ak.stock_individual_info_em)
+_individual_info_cache = {}
+
 # 股票实时数据缓存（包含 PE/PB 等）
 _stock_spot_cache = {}
 _market_cap_cache = {}
 
 
 @retry(max_attempts=2, delay=0.5)
-def get_stock_industry(symbol: str) -> str:
+def get_stock_individual_info(symbol: str) -> dict:
     """
-    获取股票所属行业/板块
-    
-    Args:
-        symbol: 股票代码
-        
-    Returns:
-        str: 所属行业名称，获取失败返回空字符串
+    获取个股详细信息（行业、上市日期、板块等）
+    使用内部缓存减少 API 调用
     """
-    global _industry_cache
+    global _individual_info_cache
     
-    # 检查缓存
-    if symbol in _industry_cache:
-        return _industry_cache[symbol]
+    if symbol in _individual_info_cache:
+        return _individual_info_cache[symbol]
     
     try:
         df = ak.stock_individual_info_em(symbol=symbol)
         if df.empty:
-            _industry_cache[symbol] = ""
-            return ""
+            _individual_info_cache[symbol] = {}
+            return {}
         
-        # 查找行业信息
+        info_dict = {}
         for _, row in df.iterrows():
-            if row['item'] == '行业':
-                industry = str(row['value'])
-                _industry_cache[symbol] = industry
-                return industry
+            info_dict[row['item']] = row['value']
         
-        _industry_cache[symbol] = ""
-        return ""
-    except Exception:
-        _industry_cache[symbol] = ""
-        return ""
+        _individual_info_cache[symbol] = info_dict
+        return info_dict
+    except Exception as e:
+        logger.debug(f"获取 {symbol} 个股信息失败: {e}")
+        _individual_info_cache[symbol] = {}
+        return {}
 
 
-@retry(max_attempts=2, delay=0.5)
+def get_stock_industry(symbol: str) -> str:
+    """
+    获取股票所属行业/板块
+    """
+    info = get_stock_individual_info(symbol)
+    return str(info.get('行业', ''))
+
+
 def get_stock_info(symbol: str) -> dict:
     """
     获取股票基本信息（上市日期等）
-    
-    Args:
-        symbol: 股票代码
-        
-    Returns:
-        dict: 包含上市日期等信息
     """
-    # 获取个股信息
-    df = ak.stock_individual_info_em(symbol=symbol)
-    
-    if df.empty:
-        return {}
-    
-    # 转换为字典
-    info_dict = {}
-    for _, row in df.iterrows():
-        info_dict[row['item']] = row['value']
-    
-    return info_dict
+    return get_stock_individual_info(symbol)
 
 
 @retry(max_attempts=2, delay=0.5)
@@ -321,16 +306,9 @@ def get_stock_fundamental(symbol: str) -> dict:
         except (ValueError, TypeError):
             pass
     
-    # 获取上市日期（需要调用 API）
-    try:
-        df = ak.stock_individual_info_em(symbol=symbol)
-        if not df.empty:
-            for _, row in df.iterrows():
-                if row['item'] == '上市时间':
-                    result['list_date'] = str(row['value']) if row['value'] else None
-                    break
-    except Exception as e:
-        logger.warning(f"获取 {symbol} 上市日期失败: {e}")
+    # 获取上市日期
+    info = get_stock_individual_info(symbol)
+    result['list_date'] = str(info.get('上市时间', '')) if info.get('上市时间') else None
     
     return result
 
@@ -394,26 +372,16 @@ def get_stock_concepts(symbol: str) -> list:
     """
     global _concept_cache
     
-    # 检查缓存
-    if symbol in _concept_cache:
-        return _concept_cache[symbol]
-    
+    info = get_stock_individual_info(symbol)
     concepts = []
-    try:
-        # 使用东方财富接口获取个股所属板块
-        df = ak.stock_individual_info_em(symbol=symbol)
-        if not df.empty:
-            for _, row in df.iterrows():
-                if row['item'] in ['板块', '概念']:
-                    value = str(row['value']) if row['value'] else ''
-                    if value:
-                        # 可能是逗号分隔的多个概念
-                        concepts.extend([c.strip() for c in value.split(',') if c.strip()])
-    except Exception as e:
-        logger.debug(f"获取 {symbol} 概念板块失败: {e}")
     
-    _concept_cache[symbol] = concepts
-    return concepts
+    # 尝试从 '板块' 或 '概念' 字段获取
+    for key in ['板块', '概念']:
+        value = info.get(key)
+        if value:
+            concepts.extend([c.strip() for c in str(value).split(',') if c.strip()])
+    
+    return list(set(concepts))
 
 
 def get_stock_market_caps(symbols: list) -> dict:

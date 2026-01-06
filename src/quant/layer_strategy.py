@@ -147,8 +147,13 @@ class LayerStrategy:
                 
                 # 获取行业信息
                 industry = get_stock_industry(code)
+                concepts = get_stock_concepts(code)
+                industry_ok = concept_ok = False
+                strength_label = ""
                 if strength_filter is not None:
-                    concepts = get_stock_concepts(code)
+                    industry_ok, concept_ok, strength_label = strength_filter.strength_flags(
+                        industry, concepts
+                    )
                     if not strength_filter.is_allowed(industry, concepts, layer=layer):
                         continue
                 
@@ -200,10 +205,16 @@ class LayerStrategy:
                     conservative_allocated += position_amount
                 
                 # 构建信号
+                concept_text = "，".join(concepts) if concepts else ""
                 signal = {
                     '代码': code,
                     '名称': name,
                     '板块': industry or '未知',
+                    '行业名称': industry or '未知',
+                    '概念列表': concept_text,
+                    '行业强势': "强" if industry_ok else "弱",
+                    '概念强势': "强" if concept_ok else "弱",
+                    '板块强度': strength_label,
                     'stock_type': stock_type,
                     'layer': layer,
                     '收盘价': round(close_price, 2),

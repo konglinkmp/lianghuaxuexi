@@ -322,6 +322,12 @@ class NotificationManager:
             "| 股票 | 现价 | 止损 | 止盈 |",
             "|------|------|------|------|"
         ]
+
+        if "风格基准权重" in plan_df.columns:
+            weight_text = plan_df["风格基准权重"].iloc[0]
+            if isinstance(weight_text, str) and weight_text:
+                content_lines.insert(1, f"**风格基准权重**：{weight_text}")
+                content_lines.insert(2, "")
         
         for _, row in plan_df.head(10).iterrows():  # 最多显示10只
             content_lines.append(

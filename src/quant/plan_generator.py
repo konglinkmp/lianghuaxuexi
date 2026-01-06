@@ -19,6 +19,7 @@ from .market_regime import adaptive_strategy
 from .risk_control import get_risk_control_state
 from .risk_positioning import calculate_position_size, estimate_adv_amount
 from .sector_strength import build_sector_strength_filter
+from .style_benchmark import get_style_benchmark_series
 from config.config import (
     TOTAL_CAPITAL, OUTPUT_CSV, MAX_POSITIONS,
     RISK_BUDGET_DEFAULT,
@@ -55,20 +56,42 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
     strength_filter = build_sector_strength_filter(stock_pool)
 
     if enable_layer:
-        return _generate_layer_trading_plan(
+        plan_df = _generate_layer_trading_plan(
             stock_pool,
             verbose,
             risk_state=risk_state,
             strength_filter=strength_filter,
         )
     else:
-        return _generate_single_layer_plan(
+        plan_df = _generate_single_layer_plan(
             stock_pool,
             verbose,
             use_position_limit,
             risk_state=risk_state,
             strength_filter=strength_filter,
         )
+
+    plan_df = _attach_style_weights(plan_df)
+    return plan_df
+
+
+def _format_style_weights(weights: dict) -> str:
+    if not weights:
+        return ""
+    return ", ".join(f"{k}:{v:.2f}" for k, v in weights.items())
+
+
+def _attach_style_weights(plan_df: pd.DataFrame) -> pd.DataFrame:
+    if plan_df is None or plan_df.empty:
+        return plan_df
+
+    _, info = get_style_benchmark_series()
+    weights = info.get("weights") if info else None
+    weight_text = _format_style_weights(weights)
+    if weight_text:
+        plan_df = plan_df.copy()
+        plan_df["风格基准权重"] = weight_text
+    return plan_df
 
 
 def _generate_layer_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
@@ -211,20 +234,31 @@ def _generate_single_layer_plan(stock_pool: pd.DataFrame, verbose: bool = True,
 
             # 获取板块信息
             industry = get_stock_industry(code)
+            concepts = []
+            industry_ok = concept_ok = False
+            strength_label = ""
             if strength_filter is not None:
-                concepts = []
                 try:
                     from .data_fetcher import get_stock_concepts
                     concepts = get_stock_concepts(code)
                 except Exception:
                     concepts = []
+                industry_ok, concept_ok, strength_label = strength_filter.strength_flags(
+                    industry, concepts
+                )
                 if not strength_filter.is_allowed(industry, concepts, layer="AGGRESSIVE"):
                     continue
             
+            concept_text = "，".join(concepts) if concepts else ""
             plans.append({
                 '代码': code,
                 '名称': name,
                 '板块': industry or '未知',
+                '行业名称': industry or '未知',
+                '概念列表': concept_text,
+                '行业强势': "强" if industry_ok else "弱",
+                '概念强势': "强" if concept_ok else "弱",
+                '板块强度': strength_label,
                 '收盘价': round(close_price, 2),
                 '建议买入价': round(close_price, 2),  # 以收盘价作为参考
                 '止损价': round(stop_loss, 2),
@@ -266,6 +300,10 @@ def print_trading_plan(plan_df: pd.DataFrame, market_status: str = ""):
     
     print("\n" + "=" * 80)
     print(f"📋 明日操作清单（生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}）")
+    if "风格基准权重" in plan_df.columns:
+        weight_text = plan_df["风格基准权重"].iloc[0]
+        if isinstance(weight_text, str) and weight_text:
+            print(f"🧭 风格基准权重: {weight_text}")
     
     # 检查是否为分层策略输出
     is_layer_strategy = 'layer' in plan_df.columns
@@ -323,6 +361,8 @@ def _print_stock_row(row, idx: int, prefix: str):
     industry = row.get('板块', '未知')
     stock_type = row.get('stock_type', '')
     reasons = row.get('reasons', '')
+    strength_label = row.get('板块强度', '')
+    concepts = row.get('概念列表', '')
     
     print(f"\n【{prefix}{idx}】{row['名称']} ({row['代码']}) - 📌{industry}")
     if stock_type:
@@ -330,6 +370,10 @@ def _print_stock_row(row, idx: int, prefix: str):
         print(f"    类型: {type_label}")
     if reasons:
         print(f"    特征: {reasons}")
+    if strength_label:
+        print(f"    板块强度: {strength_label}")
+    if concepts:
+        print(f"    概念: {concepts}")
     print(f"    收盘价: ¥{row['收盘价']:.2f} | MA20: ¥{row['MA20']:.2f}")
     print(f"    止损价: ¥{row['止损价']:.2f} → 止盈价: ¥{row['止盈价']:.2f}")
     print(f"    建议仓位: {row['建议股数']}股 (约¥{row['建议金额']:.0f}，占{row['仓位比例']})")
@@ -349,12 +393,18 @@ def _print_single_layer_plan(plan_df: pd.DataFrame, market_status: str = ""):
     # 格式化打印
     for idx, row in plan_df.iterrows():
         industry = row.get('板块', '未知')
+        concepts = row.get('概念列表', '')
+        strength_label = row.get('板块强度', '')
         print(f"\n【{idx + 1}】{row['名称']} ({row['代码']}) - 📌{industry}")
         print(f"    收盘价: ¥{row['收盘价']:.2f}")
         print(f"    建议买入价: ¥{row['建议买入价']:.2f}")
         print(f"    止损价: ¥{row['止损价']:.2f} (跌破即卖出)")
         print(f"    止盈价: ¥{row['止盈价']:.2f} (达到即卖出)")
         print(f"    MA20: ¥{row['MA20']:.2f}")
+        if strength_label:
+            print(f"    板块强度: {strength_label}")
+        if concepts:
+            print(f"    概念: {concepts}")
         print(f"    建议仓位: {row['建议股数']}股 (约¥{row['建议金额']:.0f}，占{row['仓位比例']})")
     
     print("\n" + "=" * 80)

@@ -19,6 +19,8 @@ from config.config import (
     SECTOR_STRENGTH_APPLY_LAYERS,
     SECTOR_STRENGTH_ALLOW_NO_CONCEPT,
     SECTOR_STRENGTH_CACHE_FILE,
+    CONCEPT_STRENGTH_TOP_N,
+    CONCEPT_STRENGTH_OUTPUT_FILE,
 )
 from .data_fetcher import get_stock_industry, get_stock_concepts, get_index_daily_history
 
@@ -46,6 +48,22 @@ class SectorStrengthFilter:
 
         return industry_ok or concept_ok
 
+    def strength_flags(self, industry: str, concepts: Iterable[str]) -> tuple[bool, bool, str]:
+        industry_ok = industry in self.strong_industries if industry else False
+        concepts = list(concepts) if concepts else []
+        concept_ok = any(c in self.strong_concepts for c in concepts)
+
+        if industry_ok and concept_ok:
+            label = "双强"
+        elif industry_ok:
+            label = "行业强"
+        elif concept_ok:
+            label = "概念强"
+        else:
+            label = "弱"
+
+        return industry_ok, concept_ok, label
+
 
 def build_sector_strength_filter(stock_pool: Optional[pd.DataFrame] = None) -> SectorStrengthFilter:
     if not ENABLE_SECTOR_STRENGTH_FILTER:
@@ -72,6 +90,48 @@ def build_sector_strength_filter(stock_pool: Optional[pd.DataFrame] = None) -> S
     filt = SectorStrengthFilter(strong_industries, strong_concepts)
     _save_cache(filt)
     return filt
+
+
+def get_concept_strength_table(stock_pool: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    cached = _load_cache()
+    if cached and hasattr(cached, "concept_ranking"):
+        ranking = getattr(cached, "concept_ranking", [])
+        if ranking:
+            return pd.DataFrame(ranking)
+
+    _, concept_candidates = _collect_candidates(stock_pool)
+    market_return = _get_market_return()
+    ranking_df = _calc_strength_ranking("concept", concept_candidates, market_return)
+    if ranking_df is None or ranking_df.empty:
+        return pd.DataFrame()
+
+    _save_cache(
+        build_sector_strength_filter(stock_pool),
+        concept_ranking=ranking_df.to_dict(orient="records"),
+    )
+    return ranking_df
+
+
+def generate_concept_strength_report(
+    stock_pool: Optional[pd.DataFrame] = None,
+    output_file: str = CONCEPT_STRENGTH_OUTPUT_FILE,
+    top_n: int = CONCEPT_STRENGTH_TOP_N,
+) -> pd.DataFrame:
+    table = get_concept_strength_table(stock_pool)
+    if table.empty:
+        return table
+
+    if top_n and top_n > 0:
+        table = table.head(top_n)
+
+    if output_file:
+        try:
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            table.to_csv(output_file, index=False, encoding="utf-8-sig")
+        except Exception:
+            pass
+
+    return table
 
 
 def _collect_candidates(stock_pool: Optional[pd.DataFrame]) -> tuple[Set[str], Set[str]]:
@@ -138,6 +198,37 @@ def _calc_strong_names(kind: str, candidates: Set[str], market_return: Optional[
     return set(strong)
 
 
+def _calc_strength_ranking(
+    kind: str,
+    candidates: Set[str],
+    market_return: Optional[float],
+) -> pd.DataFrame:
+    if not candidates:
+        return pd.DataFrame()
+
+    results = []
+    for name in candidates:
+        hist = _fetch_board_history(kind, name)
+        if hist is None or hist.empty:
+            continue
+
+        close = _extract_close(hist)
+        if close is None or len(close) < SECTOR_STRENGTH_LOOKBACK + 1:
+            continue
+
+        ret = close.iloc[-1] / close.iloc[-(SECTOR_STRENGTH_LOOKBACK + 1)] - 1
+        excess = ret - market_return if market_return is not None else None
+        results.append((name, ret, excess))
+
+    if not results:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(results, columns=["概念", "20日涨幅", "超额收益"])
+    df["强度排名"] = df["20日涨幅"].rank(pct=True)
+    df = df.sort_values("20日涨幅", ascending=False).reset_index(drop=True)
+    return df
+
+
 def _fetch_board_history(kind: str, name: str) -> Optional[pd.DataFrame]:
     try:
         import akshare as ak
@@ -176,10 +267,14 @@ def _load_cache() -> Optional[SectorStrengthFilter]:
 
     industries = set(data.get("industries", []))
     concepts = set(data.get("concepts", []))
-    return SectorStrengthFilter(industries, concepts)
+    filt = SectorStrengthFilter(industries, concepts)
+    concept_ranking = data.get("concept_ranking", [])
+    if concept_ranking:
+        setattr(filt, "concept_ranking", concept_ranking)
+    return filt
 
 
-def _save_cache(filt: SectorStrengthFilter) -> None:
+def _save_cache(filt: SectorStrengthFilter, concept_ranking=None) -> None:
     if not SECTOR_STRENGTH_CACHE_FILE:
         return
     data = {
@@ -187,6 +282,8 @@ def _save_cache(filt: SectorStrengthFilter) -> None:
         "industries": sorted(list(filt.strong_industries)),
         "concepts": sorted(list(filt.strong_concepts)),
     }
+    if concept_ranking is not None:
+        data["concept_ranking"] = concept_ranking
     try:
         os.makedirs(os.path.dirname(SECTOR_STRENGTH_CACHE_FILE), exist_ok=True)
         with open(SECTOR_STRENGTH_CACHE_FILE, "w", encoding="utf-8") as f:

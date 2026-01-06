@@ -68,7 +68,7 @@ PYTHONPATH=src python -m quant.main --no-adaptive
 ```
 
 - 终端显示分层推荐股票
-- 自动保存到 `data/trading_plan.csv` 文件
+- 自动保存到 `data/trading_plan.csv` 文件（含风格基准权重、板块强度、行业/概念信息）
 
 **查看结果：**
 ```bash
@@ -399,6 +399,14 @@ python tools/analyze_stock.py 000547
 | `SECTOR_STRENGTH_ALLOW_NO_CONCEPT` | True | 无概念时是否放行 |
 | `SECTOR_STRENGTH_CACHE_FILE` | data/sector_strength.json | 强度缓存 |
 
+### 概念强度榜单参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `ENABLE_CONCEPT_STRENGTH_REPORT` | True | 输出概念强度榜单 |
+| `CONCEPT_STRENGTH_TOP_N` | 20 | 输出榜单数量 |
+| `CONCEPT_STRENGTH_OUTPUT_FILE` | data/concept_strength.csv | 榜单输出文件 |
+
 ### 分层策略参数
 
 | 参数 | 默认值 | 说明 |
@@ -439,10 +447,15 @@ python tools/analyze_stock.py 000547
 | `data/myshare.txt` | 自选股票池 |
 | `data/hot_concepts.txt` | 热门概念配置 |
 | `data/trading_plan.csv` | 生成的交易计划 |
+| `data/concept_strength.csv` | 当日最强概念榜单 |
 | `data/positions.json` | 持仓记录 |
 | `config/notification_config.json` | 推送配置 |
 | `tools/check_holdings.py` | 持仓快速扫描工具 |
 | `tools/analyze_stock.py` | 个股深度诊断工具 |
+| `src/quant/basic_filters.py` | 基本面过滤器（PE/PB/上市时间） |
+| `src/quant/market_regime.py` | 市场状态识别（波动率分析） |
+| `src/quant/risk_metrics.py` | 风险指标计算 |
+| `update_holdings.py` | 账户数据手动更新脚本 |
 | `outputs/` | 图表/报告输出目录 |
 
 ---
@@ -477,8 +490,8 @@ source venv/bin/activate
 
 | 分层 | 股票类型 | 筛选条件 | 止损 | 止盈 |
 |------|----------|----------|------|------|
-| 💰 稳健层 | 价值趋势股 | PE(0-50) + PB(≤45) + 站上MA20 + 放量 | -5% | +15% |
-| 🚀 激进层 | 热门资金股 | 高PE+高换手率 / 强动量 / 巨量 / 热门概念 | -8% | +25% |
+| 💰 稳健层 | 价值趋势股 | PE(0-50) + PB(≤5) + 站上MA20 + 量比≥1.3 | -5% | +15% |
+| 🚀 激进层 | 热门资金股 | (PE>80 & 换手>8%) 或 (动量>25%) 或 (量比>3) 或 热门概念 | -8% | +25% |
 
 ### 传统单层策略
 

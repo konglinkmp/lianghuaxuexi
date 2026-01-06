@@ -97,6 +97,11 @@ SECTOR_STRENGTH_APPLY_LAYERS = "aggressive"  # aggressive / all
 SECTOR_STRENGTH_ALLOW_NO_CONCEPT = True
 SECTOR_STRENGTH_CACHE_FILE = "data/sector_strength.json"
 
+# 概念强度榜单输出
+ENABLE_CONCEPT_STRENGTH_REPORT = True
+CONCEPT_STRENGTH_TOP_N = 20
+CONCEPT_STRENGTH_OUTPUT_FILE = "data/concept_strength.csv"
+
 # ============ 数据配置 ============
 # 历史数据获取天数（需足够计算均线）
 HISTORY_DAYS = 120

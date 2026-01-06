@@ -316,28 +316,63 @@ class NotificationManager:
         
         title = f"📋 量化交易信号 ({datetime.now().strftime('%m-%d')})"
         
-        content_lines = [
-            f"**共 {len(plan_df)} 只股票符合买入条件**",
-            "",
-            "| 股票 | 现价 | 止损 | 止盈 |",
-            "|------|------|------|------|"
-        ]
-
+        # 获取市场状态和风格权重
+        market_info = []
         if "风格基准权重" in plan_df.columns:
             weight_text = plan_df["风格基准权重"].iloc[0]
             if isinstance(weight_text, str) and weight_text:
-                content_lines.insert(1, f"**风格基准权重**：{weight_text}")
-                content_lines.insert(2, "")
+                market_info.append(f"🧭 **风格基准**：{weight_text}")
         
-        for _, row in plan_df.head(10).iterrows():  # 最多显示10只
-            content_lines.append(
-                f"| {row['名称']} | ¥{row['收盘价']} | ¥{row['止损价']} | ¥{row['止盈价']} |"
-            )
+        content_lines = [
+            f"**共 {len(plan_df)} 只股票符合买入条件**",
+            "\n".join(market_info) if market_info else "",
+            "---"
+        ]
+
+        # 检查是否为分层策略
+        is_layer = 'layer' in plan_df.columns
+        
+        def _format_stock_item(row, prefix="🔹"):
+            name = row['名称']
+            code = row['代码']
+            price = row['收盘价']
+            sl = row['止损价']
+            tp = row['止盈价']
+            shares = row.get('建议股数', 0)
+            amount = row.get('建议金额', 0)
+            reasons = row.get('reasons', row.get('特征', '趋势确认'))
+            
+            item = [
+                f"{prefix} **{name} ({code})**",
+                f"   💰 现价: ¥{price:.2f} | 止损: ¥{sl:.2f} | 止盈: ¥{tp:.2f}",
+                f"   📊 建议: **{shares}股** (约¥{amount:,.0f})",
+                f"   📝 理由: {reasons}",
+                ""
+            ]
+            return "\n".join(item)
+
+        if is_layer:
+            from ..strategy.layer_strategy import LAYER_CONSERVATIVE, LAYER_AGGRESSIVE
+            cons = plan_df[plan_df['layer'] == LAYER_CONSERVATIVE]
+            aggr = plan_df[plan_df['layer'] == LAYER_AGGRESSIVE]
+            
+            if not cons.empty:
+                content_lines.append("💰 **稳健层 (价值趋势)**")
+                for _, row in cons.head(5).iterrows():
+                    content_lines.append(_format_stock_item(row, "🛡️"))
+            
+            if not aggr.empty:
+                content_lines.append("🚀 **激进层 (热门资金)**")
+                for _, row in aggr.head(5).iterrows():
+                    content_lines.append(_format_stock_item(row, "🔥"))
+        else:
+            for _, row in plan_df.head(10).iterrows():
+                content_lines.append(_format_stock_item(row))
         
         if len(plan_df) > 10:
-            content_lines.append(f"\n*...还有 {len(plan_df) - 10} 只股票，请查看完整报告*")
+            content_lines.append(f"*...还有 {len(plan_df) - 10} 只股票，请查看完整报告*")
         
-        content_lines.append(f"\n⚠️ 以上仅供参考，不构成投资建议")
+        content_lines.append("\n⚠️ 以上仅供参考，不构成投资建议")
         
         return self.send_all(title, "\n".join(content_lines))
     

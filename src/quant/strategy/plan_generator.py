@@ -419,7 +419,7 @@ def _print_single_layer_plan(plan_df: pd.DataFrame, market_status: str = ""):
 
 def save_trading_plan(plan_df: pd.DataFrame, filepath: str = OUTPUT_CSV):
     """
-    保存交易计划到CSV文件
+    保存交易计划到CSV和Markdown文件
     """
     if plan_df.empty:
         print(f"\n[信息] 无交易计划需要保存")
@@ -429,10 +429,75 @@ def save_trading_plan(plan_df: pd.DataFrame, filepath: str = OUTPUT_CSV):
         output_dir = os.path.dirname(filepath)
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
+        
+        # 保存 CSV
         plan_df.to_csv(filepath, index=False, encoding='utf-8-sig')
         print(f"\n[信息] 交易计划已保存至: {filepath}")
+        
+        # 保存 Markdown 报告
+        md_path = filepath.replace('.csv', '.md')
+        save_markdown_report(plan_df, md_path)
+        print(f"[信息] 详细报告已保存至: {md_path}")
+        
     except Exception as e:
-        print(f"\n[错误] 保存CSV失败: {e}")
+        print(f"\n[错误] 保存计划失败: {e}")
+
+
+def save_markdown_report(plan_df: pd.DataFrame, filepath: str):
+    """生成美观的 Markdown 交易报告"""
+    title = f"# 📋 量化交易计划报告 ({datetime.now().strftime('%Y-%m-%d')})"
+    
+    lines = [title, "\n"]
+    
+    if "风格基准权重" in plan_df.columns:
+        weight_text = plan_df["风格基准权重"].iloc[0]
+        if weight_text:
+            lines.append(f"> 🧭 **风格基准权重**：{weight_text}\n")
+
+    is_layer = 'layer' in plan_df.columns
+    
+    def _get_table(df):
+        if df.empty:
+            return "暂无符合条件的股票"
+        
+        # 挑选核心字段
+        cols = ['名称', '代码', '收盘价', '止损价', '止盈价', '建议股数', '建议金额', '仓位比例', 'reasons']
+        # 检查列是否存在
+        existing_cols = [c for c in cols if c in df.columns]
+        temp_df = df[existing_cols].copy()
+        
+        # 重命名列名以提高美观度
+        rename_map = {
+            'reasons': '推荐理由',
+            '建议金额': '建议金额(¥)',
+            '收盘价': '现价'
+        }
+        temp_df = temp_df.rename(columns=rename_map)
+        
+        return temp_df.to_markdown(index=False)
+
+    if is_layer:
+        from .layer_strategy import LAYER_CONSERVATIVE, LAYER_AGGRESSIVE
+        cons = plan_df[plan_df['layer'] == LAYER_CONSERVATIVE]
+        aggr = plan_df[plan_df['layer'] == LAYER_AGGRESSIVE]
+        
+        lines.append("## 🛡️ 稳健层 (价值趋势策略)")
+        lines.append(_get_table(cons))
+        lines.append("\n")
+        
+        lines.append("## 🚀 激进层 (热门资金策略)")
+        lines.append(_get_table(aggr))
+        lines.append("\n")
+    else:
+        lines.append("## 📈 选股清单")
+        lines.append(_get_table(plan_df))
+        lines.append("\n")
+    
+    lines.append("---\n")
+    lines.append("**⚠️ 风险提示**：以上内容仅供参考，不构成投资建议。市场有风险，入市需谨慎。")
+    
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write("\n".join(lines))
 
 
 if __name__ == "__main__":

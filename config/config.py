@@ -65,6 +65,38 @@ AUCTION_REPRICE_SLIPPAGE = 0.005  # 触发价上浮滑点
 AUCTION_MIN_VOLUME_RATIO = 0.5    # 竞价量比低于0.5取消
 AUCTION_LIMIT_BUFFER = 0.98       # 接近涨跌停的缓冲比例
 
+# ============ 风格基准（组合加权） ============
+ENABLE_STYLE_BENCHMARK = True
+STYLE_LOOKBACK_DAYS = 120
+STYLE_INDEX_CODES = {
+    "hs300": "sh000300",
+    "csi500": "sh000905",
+    "csi1000": "sh000852",
+}
+STYLE_CAP_THRESHOLDS = {
+    "large": 100_000_000_000,  # 1000亿
+    "mid": 30_000_000_000,     # 300亿
+}
+STYLE_BUCKET_MAP = {
+    "large": "hs300",
+    "mid": "csi500",
+    "small": "csi1000",
+}
+STYLE_DEFAULT_WEIGHTS = {
+    "hs300": 0.5,
+    "csi1000": 0.5,
+}
+
+# ============ 板块强度过滤 ============
+ENABLE_SECTOR_STRENGTH_FILTER = True
+SECTOR_STRENGTH_LOOKBACK = 20
+SECTOR_STRENGTH_TOP_PCT = 0.20
+SECTOR_STRENGTH_REQUIRE_EXCESS = True
+SECTOR_STRENGTH_REQUIRE_BOTH = True
+SECTOR_STRENGTH_APPLY_LAYERS = "aggressive"  # aggressive / all
+SECTOR_STRENGTH_ALLOW_NO_CONCEPT = True
+SECTOR_STRENGTH_CACHE_FILE = "data/sector_strength.json"
+
 # ============ 数据配置 ============
 # 历史数据获取天数（需足够计算均线）
 HISTORY_DAYS = 120

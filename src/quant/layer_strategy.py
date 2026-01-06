@@ -16,6 +16,7 @@ from .data_fetcher import get_stock_daily_history, get_stock_industry
 from .strategy import calculate_ma, calculate_atr
 from .risk_control import get_risk_control_state
 from .risk_positioning import calculate_position_size, estimate_adv_amount
+from .data_fetcher import get_stock_concepts
 from config.config import (
     TOTAL_CAPITAL,
     CONSERVATIVE_CAPITAL_RATIO,
@@ -60,7 +61,8 @@ class LayerStrategy:
     
     def generate_layer_signals(self, stock_pool: pd.DataFrame,
                                 verbose: bool = True,
-                                risk_state=None) -> Dict:
+                                risk_state=None,
+                                strength_filter=None) -> Dict:
         """
         为股票池生成分层交易信号
         
@@ -145,6 +147,10 @@ class LayerStrategy:
                 
                 # 获取行业信息
                 industry = get_stock_industry(code)
+                if strength_filter is not None:
+                    concepts = get_stock_concepts(code)
+                    if not strength_filter.is_allowed(industry, concepts, layer=layer):
+                        continue
                 
                 # 计算MA20
                 ma20 = calculate_ma(df, 20).iloc[-1] if len(df) >= 20 else close_price

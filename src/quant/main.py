@@ -25,6 +25,7 @@ from .data_fetcher import get_index_daily_history
 from config.config import TOTAL_CAPITAL, OUTPUT_CSV
 from .notifier import notification_manager
 from .auction_filter import apply_auction_filters
+from .style_benchmark import get_style_benchmark_series
 
 
 def print_header():
@@ -38,6 +39,14 @@ def print_header():
 
 def update_market_regime() -> str:
     try:
+        benchmark_series, info = get_style_benchmark_series()
+        if benchmark_series is not None and not benchmark_series.empty:
+            result = adaptive_strategy.update_regime(benchmark_series)
+            adaptive_strategy.print_status()
+            if info and info.get("weights"):
+                print(f"[风格基准] 权重: {info.get('weights')}")
+            return result.get("regime_name", "")
+
         index_df = get_index_daily_history()
         if index_df.empty:
             return ""

@@ -375,6 +375,30 @@ python tools/analyze_stock.py 000547
 | `AUCTION_MIN_VOLUME_RATIO` | 0.5 | 量比过滤阈值 |
 | `AUCTION_LIMIT_BUFFER` | 0.98 | 接近涨跌停缓冲 |
 
+### 风格基准参数（组合加权）
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `ENABLE_STYLE_BENCHMARK` | True | 启用风格基准 |
+| `STYLE_LOOKBACK_DAYS` | 120 | 基准历史窗口 |
+| `STYLE_INDEX_CODES` | ... | 风格指数代码映射 |
+| `STYLE_CAP_THRESHOLDS` | ... | 市值分层阈值 |
+| `STYLE_BUCKET_MAP` | ... | 市值分层→指数映射 |
+| `STYLE_DEFAULT_WEIGHTS` | ... | 无持仓时默认权重 |
+
+### 板块强度过滤参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `ENABLE_SECTOR_STRENGTH_FILTER` | True | 启用板块强度过滤 |
+| `SECTOR_STRENGTH_LOOKBACK` | 20 | 板块强度回看天数 |
+| `SECTOR_STRENGTH_TOP_PCT` | 0.20 | 强度排名前百分比 |
+| `SECTOR_STRENGTH_REQUIRE_EXCESS` | True | 要求超额收益>0 |
+| `SECTOR_STRENGTH_REQUIRE_BOTH` | True | 行业+概念双重过滤 |
+| `SECTOR_STRENGTH_APPLY_LAYERS` | aggressive | 仅激进层/全部 |
+| `SECTOR_STRENGTH_ALLOW_NO_CONCEPT` | True | 无概念时是否放行 |
+| `SECTOR_STRENGTH_CACHE_FILE` | data/sector_strength.json | 强度缓存 |
+
 ### 分层策略参数
 
 | 参数 | 默认值 | 说明 |
@@ -400,8 +424,10 @@ python tools/analyze_stock.py 000547
 | `src/quant/stock_pool.py` | 股票池管理 |
 | `src/quant/plan_generator.py` | 交易计划生成 |
 | `src/quant/auction_filter.py` | 竞价过滤器 |
+| `src/quant/style_benchmark.py` | 风格基准合成 |
 | `src/quant/stock_classifier.py` | 股票分类器（热门股/价值股） |
 | `src/quant/layer_strategy.py` | 分层策略引擎 |
+| `src/quant/sector_strength.py` | 板块强度过滤 |
 | `src/quant/backtester.py` | 回测引擎 |
 | `src/quant/transaction_cost.py` | 交易成本模型 |
 | `src/quant/position_tracker.py` | 持仓跟踪 |

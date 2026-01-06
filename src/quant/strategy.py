@@ -5,6 +5,7 @@
 
 import pandas as pd
 from .data_fetcher import get_index_daily_history
+from .style_benchmark import get_style_benchmark_series
 from .market_regime import adaptive_strategy, AdaptiveParameters
 from config.config import MA_SHORT, MA_LONG
 
@@ -265,23 +266,27 @@ def check_market_risk() -> tuple:
         tuple: (是否有风险, 风险提示信息)
     """
     try:
-        # 获取沪深300指数数据
+        benchmark_series, info = get_style_benchmark_series()
+        if benchmark_series is not None and not benchmark_series.empty and len(benchmark_series) >= MA_LONG:
+            ma60 = benchmark_series.rolling(window=MA_LONG).mean()
+            latest = benchmark_series.iloc[-1]
+            latest_ma = ma60.iloc[-1]
+            if latest < latest_ma:
+                return True, f"⚠️ 风险警告：风格基准({latest:.2f})跌破60日均线({latest_ma:.2f})，环境风险大，停止买入，仅处理止损"
+            return False, f"✅ 大盘正常：风格基准({latest:.2f})位于60日均线({latest_ma:.2f})之上"
+
+        # 兜底：沪深300
         index_df = get_index_daily_history()
-        
         if index_df.empty or len(index_df) < MA_LONG:
             return False, "无法获取指数数据，暂不限制"
-        
-        # 计算60日均线
+
         index_df['ma60'] = calculate_ma(index_df, MA_LONG)
-        
         latest = index_df.iloc[-1]
-        
-        # 判断是否跌破60日均线
+
         if latest['close'] < latest['ma60']:
             return True, f"⚠️ 风险警告：沪深300({latest['close']:.2f})跌破60日均线({latest['ma60']:.2f})，环境风险大，停止买入，仅处理止损"
-        else:
-            return False, f"✅ 大盘正常：沪深300({latest['close']:.2f})位于60日均线({latest['ma60']:.2f})之上"
-            
+        return False, f"✅ 大盘正常：沪深300({latest['close']:.2f})位于60日均线({latest['ma60']:.2f})之上"
+
     except Exception as e:
         return False, f"检查大盘风险时出错: {e}"
 

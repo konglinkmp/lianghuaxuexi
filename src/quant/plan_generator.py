@@ -18,6 +18,7 @@ from .strategy import (
 from .market_regime import adaptive_strategy
 from .risk_control import get_risk_control_state
 from .risk_positioning import calculate_position_size, estimate_adv_amount
+from .sector_strength import build_sector_strength_filter
 from config.config import (
     TOTAL_CAPITAL, OUTPUT_CSV, MAX_POSITIONS,
     RISK_BUDGET_DEFAULT,
@@ -51,15 +52,27 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
     enable_layer = use_layer_strategy if use_layer_strategy is not None else ENABLE_TWO_LAYER_STRATEGY
     
     risk_state = get_risk_control_state(TOTAL_CAPITAL)
+    strength_filter = build_sector_strength_filter(stock_pool)
 
     if enable_layer:
-        return _generate_layer_trading_plan(stock_pool, verbose, risk_state=risk_state)
+        return _generate_layer_trading_plan(
+            stock_pool,
+            verbose,
+            risk_state=risk_state,
+            strength_filter=strength_filter,
+        )
     else:
-        return _generate_single_layer_plan(stock_pool, verbose, use_position_limit, risk_state=risk_state)
+        return _generate_single_layer_plan(
+            stock_pool,
+            verbose,
+            use_position_limit,
+            risk_state=risk_state,
+            strength_filter=strength_filter,
+        )
 
 
 def _generate_layer_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
-                                 risk_state=None) -> pd.DataFrame:
+                                 risk_state=None, strength_filter=None) -> pd.DataFrame:
     """
     使用分层策略生成交易计划
     """
@@ -67,7 +80,12 @@ def _generate_layer_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
         print("\n🔄 使用分层策略（稳健层+激进层）")
     
     strategy = LayerStrategy(TOTAL_CAPITAL)
-    layer_signals = strategy.generate_layer_signals(stock_pool, verbose=verbose, risk_state=risk_state)
+    layer_signals = strategy.generate_layer_signals(
+        stock_pool,
+        verbose=verbose,
+        risk_state=risk_state,
+        strength_filter=strength_filter,
+    )
     
     # 格式化为DataFrame
     return strategy.format_layer_plans(layer_signals)
@@ -75,7 +93,8 @@ def _generate_layer_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
 
 def _generate_single_layer_plan(stock_pool: pd.DataFrame, verbose: bool = True,
                                  use_position_limit: bool = True,
-                                 risk_state=None) -> pd.DataFrame:
+                                 risk_state=None,
+                                 strength_filter=None) -> pd.DataFrame:
     """
     使用单层策略生成交易计划（原有逻辑）
     """
@@ -192,6 +211,15 @@ def _generate_single_layer_plan(stock_pool: pd.DataFrame, verbose: bool = True,
 
             # 获取板块信息
             industry = get_stock_industry(code)
+            if strength_filter is not None:
+                concepts = []
+                try:
+                    from .data_fetcher import get_stock_concepts
+                    concepts = get_stock_concepts(code)
+                except Exception:
+                    concepts = []
+                if not strength_filter.is_allowed(industry, concepts, layer="AGGRESSIVE"):
+                    continue
             
             plans.append({
                 '代码': code,

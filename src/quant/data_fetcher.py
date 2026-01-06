@@ -176,6 +176,7 @@ _industry_cache = {}
 
 # 股票实时数据缓存（包含 PE/PB 等）
 _stock_spot_cache = {}
+_market_cap_cache = {}
 
 
 @retry(max_attempts=2, delay=0.5)
@@ -366,6 +367,39 @@ def get_stock_concepts(symbol: str) -> list:
     return concepts
 
 
+def get_stock_market_caps(symbols: list) -> dict:
+    """
+    批量获取股票总市值
+
+    Args:
+        symbols: 股票代码列表
+
+    Returns:
+        dict: {code: total_market_cap}
+    """
+    global _market_cap_cache
+    if not symbols:
+        return {}
+
+    missing = [s for s in symbols if s not in _market_cap_cache]
+    if missing:
+        try:
+            df = ak.stock_zh_a_spot_em()
+            if not df.empty:
+                for _, row in df.iterrows():
+                    code = str(row.get("代码"))
+                    cap = row.get("总市值")
+                    if code and cap is not None and cap != "-":
+                        try:
+                            _market_cap_cache[code] = float(cap)
+                        except (TypeError, ValueError):
+                            continue
+        except Exception as e:
+            logger.warning(f"获取市值数据失败: {e}")
+
+    return {code: _market_cap_cache.get(code, 0.0) for code in symbols}
+
+
 def calculate_momentum(df: pd.DataFrame, days: int = 10) -> float:
     """
     计算N日动量（涨跌幅）
@@ -430,4 +464,3 @@ if __name__ == "__main__":
     print("\n测试获取沪深300指数数据...")
     index_hist = get_index_daily_history()
     print(index_hist.tail())
-

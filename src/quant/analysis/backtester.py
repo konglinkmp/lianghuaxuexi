@@ -208,22 +208,22 @@ def backtest_stock(
             # 如果 Low <= StopLoss，说明盘中触及止损
             # 此时卖出价格应为 StopLoss - 滑点，或者 Low（如果 Low 更低且直接封死）
             # 这里假设触及即止损
-            if current_price <= stop_loss or row['low'] <= stop_loss:
+            if current_price <= stop_loss or current['low'] <= stop_loss:
                 exit_reason = "止损"
                 
                 # 动态滑点：基于当日振幅 (High-Low)/Open
-                volatility = (row['high'] - row['low']) / row['open'] if row['open'] > 0 else 0.02
+                volatility = (current['high'] - current['low']) / current['open'] if current['open'] > 0 else 0.02
                 slippage = 0.005 + (volatility * 0.1) # 基础滑点0.5% + 波动率的10%
                 
                 # 如果是开盘就低开在止损线下，则以开盘价卖出
-                if row['open'] <= stop_loss:
-                    exit_price = row['open'] * (1 - slippage)
+                if current['open'] <= stop_loss:
+                    exit_price = current['open'] * (1 - slippage)
                 else:
                     # 盘中触及，以止损价卖出
                     exit_price = stop_loss * (1 - slippage)
                 
                 # 确保卖出价不低于当日最低价（极端情况）
-                exit_price = max(exit_price, row['low']) 
+                exit_price = max(exit_price, current['low']) 
             
             # 2. 固定止盈
             elif current_price >= take_profit:

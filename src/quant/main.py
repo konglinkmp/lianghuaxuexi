@@ -78,7 +78,7 @@ def run_auction_filter(plan_df=None, input_file: str = OUTPUT_CSV,
         if not os.path.exists(input_file):
             print(f"[错误] 竞价过滤输入文件不存在: {input_file}")
             return None, None
-        plan_df = pd.read_csv(input_file)
+        plan_df = pd.read_csv(input_file, dtype={'代码': str})
         if plan_df.empty:
             print("[信息] 竞价过滤输入为空，无需处理")
             return pd.DataFrame(), pd.DataFrame()

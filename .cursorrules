@@ -1,0 +1,5 @@
+Always generate commit messages in Chinese.
+遵循 Conventional Commits 规范，但描述部分使用中文。
+例如：
+feat: 增加分层策略
+fix: 修复空数据处理

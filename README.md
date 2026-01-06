@@ -2,6 +2,8 @@
 
 一个基于 Python 的 A 股量化交易决策辅助系统，帮助你筛选股票、生成交易计划、回测策略效果。
 
+✨ **新增分层策略**：将资金分为稳健层（70%）和激进层（30%），自动分类股票并采用差异化风控策略。
+
 ---
 
 ## 🚀 快速开始
@@ -41,15 +43,30 @@ PYTHONPATH=src python -m quant.main
 # 激活环境
 source venv/bin/activate
 
-# 运行主程序（默认分析2000只股票）
+# 运行主程序（默认使用分层策略）
 PYTHONPATH=src python -m quant.main
+
+# 可选：禁用分层策略，使用传统单层模式
+PYTHONPATH=src python -m quant.main --no-layer
 
 # 可选：禁用自适应参数
 PYTHONPATH=src python -m quant.main --no-adaptive
 ```
 
-**输出结果：**
-- 终端显示符合条件的股票列表
+**输出结果（分层策略）：**
+```
+📊 共筛选出 8 只股票（稳健层 5 + 激进层 3）
+
+💰 稳健层（价值趋势策略）
+    止损: -5% | 止盈: +15%
+    【稳1】江河集团 - 价值趋势股
+
+🚀 激进层（热门资金策略）
+    止损: -8% | 止盈: +25%
+    【激1】天力复合 - 热门资金股
+```
+
+- 终端显示分层推荐股票
 - 自动保存到 `data/trading_plan.csv` 文件
 
 **查看结果：**
@@ -289,6 +306,18 @@ python tools/analyze_stock.py 000547
 | `TOTAL_CAPITAL` | 100000 | 总资金（用于计算仓位） |
 | `POSITION_RATIO` | 0.10 | 单笔仓位比例（10%） |
 
+### 分层策略参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `ENABLE_TWO_LAYER_STRATEGY` | True | 分层策略开关 |
+| `CONSERVATIVE_CAPITAL_RATIO` | 0.70 | 稳健层资金比例 |
+| `AGGRESSIVE_CAPITAL_RATIO` | 0.30 | 激进层资金比例 |
+| `CONSERVATIVE_STOP_LOSS` | 0.05 | 稳健层止损-5% |
+| `CONSERVATIVE_TAKE_PROFIT` | 0.15 | 稳健层止盈+15% |
+| `AGGRESSIVE_STOP_LOSS` | 0.08 | 激进层止损-8% |
+| `AGGRESSIVE_TAKE_PROFIT` | 0.25 | 激进层止盈+25% |
+
 ---
 
 ## 📁 文件说明
@@ -301,6 +330,8 @@ python tools/analyze_stock.py 000547
 | `src/quant/data_fetcher.py` | 数据获取（AKShare） |
 | `src/quant/stock_pool.py` | 股票池管理 |
 | `src/quant/plan_generator.py` | 交易计划生成 |
+| `src/quant/stock_classifier.py` | 股票分类器（热门股/价值股） |
+| `src/quant/layer_strategy.py` | 分层策略引擎 |
 | `src/quant/backtester.py` | 回测引擎 |
 | `src/quant/transaction_cost.py` | 交易成本模型 |
 | `src/quant/position_tracker.py` | 持仓跟踪 |
@@ -308,6 +339,7 @@ python tools/analyze_stock.py 000547
 | `src/quant/visualizer.py` | 可视化报告 |
 | `src/quant/notifier.py` | 消息推送 |
 | `data/myshare.txt` | 自选股票池 |
+| `data/hot_concepts.txt` | 热门概念配置 |
 | `data/trading_plan.csv` | 生成的交易计划 |
 | `data/positions.json` | 持仓记录 |
 | `config/notification_config.json` | 推送配置 |
@@ -341,12 +373,25 @@ source venv/bin/activate
 
 ## 📊 策略说明
 
-### 买入条件（需同时满足至少2条）
+### 分层策略（默认启用）
+
+系统自动将股票分为两层，采用差异化策略：
+
+| 分层 | 股票类型 | 筛选条件 | 止损 | 止盈 |
+|------|----------|----------|------|------|
+| 💰 稳健层 | 价值趋势股 | PE(0-50) + PB(≤45) + 站上MA20 + 放量 | -5% | +15% |
+| 🚀 激进层 | 热门资金股 | 高PE+高换手率 / 强动量 / 巨量 / 热门概念 | -8% | +25% |
+
+### 传统单层策略
+
+使用 `--no-layer` 参数切换到传统模式：
+
+#### 买入条件（需同时满足至少2条）
 1. ✅ **动能趋势**：收盘价站上20日均线 + 成交量放大1.2倍
 2. ✅ **突破确认**：前4日均在均线上方，最新日回踩不破
 3. ✅ **量价健康**：排除价涨量缩的背离情况
 
-### 卖出条件（满足任一即卖出）
+#### 卖出条件（满足任一即卖出）
 1. 🔴 **止损**：跌破止损价（ATR动态止损 或 固定5%）
 2. 🟢 **止盈**：涨幅达到15%
 3. 🟡 **移动止盈**：从最高点回落8%

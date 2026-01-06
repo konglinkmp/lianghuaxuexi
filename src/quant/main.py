@@ -22,6 +22,7 @@ from .plan_generator import generate_trading_plan, print_trading_plan, save_trad
 from .market_regime import adaptive_strategy
 from .data_fetcher import get_index_daily_history
 from config.config import TOTAL_CAPITAL
+from .notifier import notification_manager
 
 
 def print_header():
@@ -126,6 +127,15 @@ def main():
     # Step 4: 输出结果
     print_trading_plan(plan, market_status=market_status)
     save_trading_plan(plan)
+    
+    # Step 5: 推送通知
+    if not plan.empty:
+        print("\n🔔 正在推送交易信号...")
+        success_count = notification_manager.send_trading_plan(plan)
+        if success_count > 0:
+            print(f"✅ 已成功推送到 {success_count} 个渠道")
+        else:
+            print("❌ 推送失败，请检查配置")
     
     print("\n✅ 分析完成！")
 

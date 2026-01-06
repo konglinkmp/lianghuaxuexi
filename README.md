@@ -26,6 +26,7 @@ PYTHONPATH=src python -m quant.main
 | 功能 | 说明 | 命令 |
 |------|------|------|
 | 生成交易计划 | 筛选明日可买入的股票 | `PYTHONPATH=src python -m quant.main` |
+| 竞价过滤 | 开盘前过滤跳空计划 | `PYTHONPATH=src python -m quant.main --auction-only` |
 | 回测策略 | 验证策略历史表现 | `PYTHONPATH=src python -m quant.backtester` |
 | 单股回测 | 测试某只股票的策略效果 | 见下方示例 |
 | 持仓管理 | 记录和跟踪持仓 | 见下方示例 |
@@ -252,6 +253,34 @@ drawdown_controller.print_status()
 
 ---
 
+### 场景六点五：竞价过滤（开盘前过滤跳空）
+
+```bash
+PYTHONPATH=src python -c "
+import akshare as ak
+import pandas as pd
+from quant.auction_filter import apply_auction_filters
+
+plan = pd.read_csv('data/trading_plan.csv')
+snapshot = ak.stock_zh_a_spot_em()  # 9:15~9:25 期间运行
+
+keep_df, cancel_df = apply_auction_filters(plan, snapshot)
+keep_df.to_csv('data/trading_plan_auction.csv', index=False, encoding='utf-8-sig')
+
+print('保留数量:', len(keep_df), '取消数量:', len(cancel_df))
+"
+```
+
+或直接使用主程序参数：
+
+```bash
+PYTHONPATH=src python -m quant.main --auction-only
+```
+
+说明：`--auction-only` 会在过滤后直接推送保留计划（需已配置通知）。
+
+---
+
 ### 场景七：配置消息推送（钉钉/微信）
 
 1. 编辑 `config/notification_config.json`
@@ -335,6 +364,17 @@ python tools/analyze_stock.py 000547
 | `RISK_CONTRIBUTION_LIMIT` | 0.25 | 单票风险贡献上限 |
 | `LIQUIDITY_ADV_LIMIT` | 0.05 | 单票仓位不超过20日成交额的5% |
 
+### 竞价过滤参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `AUCTION_GAP_UP_CANCEL` | 0.03 | 高开超过3%取消买入 |
+| `AUCTION_GAP_DOWN_CANCEL` | 0.02 | 低开超过2%取消买入 |
+| `AUCTION_GAP_UP_REPRICE` | 0.01 | 高开超过1%重定价 |
+| `AUCTION_REPRICE_SLIPPAGE` | 0.005 | 重定价滑点 |
+| `AUCTION_MIN_VOLUME_RATIO` | 0.5 | 量比过滤阈值 |
+| `AUCTION_LIMIT_BUFFER` | 0.98 | 接近涨跌停缓冲 |
+
 ### 分层策略参数
 
 | 参数 | 默认值 | 说明 |
@@ -359,6 +399,7 @@ python tools/analyze_stock.py 000547
 | `src/quant/data_fetcher.py` | 数据获取（AKShare） |
 | `src/quant/stock_pool.py` | 股票池管理 |
 | `src/quant/plan_generator.py` | 交易计划生成 |
+| `src/quant/auction_filter.py` | 竞价过滤器 |
 | `src/quant/stock_classifier.py` | 股票分类器（热门股/价值股） |
 | `src/quant/layer_strategy.py` | 分层策略引擎 |
 | `src/quant/backtester.py` | 回测引擎 |

@@ -57,6 +57,14 @@ LIQUIDITY_ADV_LIMIT = 0.05         # 单票仓位不超过20日成交额的5%
 # 回撤控制开关（需配合账户净值输入）
 ENABLE_DRAWDOWN_CONTROL = True
 
+# ============ 竞价过滤参数 ============
+AUCTION_GAP_UP_CANCEL = 0.03      # 高开超过3%取消买入
+AUCTION_GAP_DOWN_CANCEL = 0.02    # 低开超过2%取消买入
+AUCTION_GAP_UP_REPRICE = 0.01     # 高开超过1%则重新定触发价
+AUCTION_REPRICE_SLIPPAGE = 0.005  # 触发价上浮滑点
+AUCTION_MIN_VOLUME_RATIO = 0.5    # 竞价量比低于0.5取消
+AUCTION_LIMIT_BUFFER = 0.98       # 接近涨跌停的缓冲比例
+
 # ============ 数据配置 ============
 # 历史数据获取天数（需足够计算均线）
 HISTORY_DAYS = 120

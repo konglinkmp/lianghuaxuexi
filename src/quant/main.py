@@ -16,13 +16,15 @@ A股量化交易决策辅助工具 - 主程序入口
 import argparse
 import os
 from datetime import datetime
+import pandas as pd
 from .stock_pool import get_final_pool
 from .strategy import check_market_risk
 from .plan_generator import generate_trading_plan, print_trading_plan, save_trading_plan
 from .market_regime import adaptive_strategy
 from .data_fetcher import get_index_daily_history
-from config.config import TOTAL_CAPITAL
+from config.config import TOTAL_CAPITAL, OUTPUT_CSV
 from .notifier import notification_manager
+from .auction_filter import apply_auction_filters
 
 
 def print_header():
@@ -48,6 +50,34 @@ def update_market_regime() -> str:
         return ""
 
 
+def run_auction_filter(plan_df=None, input_file: str = OUTPUT_CSV,
+                       output_file: str = "data/trading_plan_auction.csv"):
+    try:
+        import akshare as ak
+    except Exception as exc:
+        print(f"[错误] 竞价过滤需要 akshare: {exc}")
+        return None, None
+
+    if plan_df is None or plan_df.empty:
+        if not os.path.exists(input_file):
+            print(f"[错误] 竞价过滤输入文件不存在: {input_file}")
+            return None, None
+        plan_df = pd.read_csv(input_file)
+        if plan_df.empty:
+            print("[信息] 竞价过滤输入为空，无需处理")
+            return pd.DataFrame(), pd.DataFrame()
+
+    snapshot = ak.stock_zh_a_spot_em()
+    if snapshot is None or snapshot.empty:
+        print("[错误] 获取竞价快照失败")
+        return None, None
+
+    keep_df, cancel_df = apply_auction_filters(plan_df, snapshot)
+    keep_df.to_csv(output_file, index=False, encoding='utf-8-sig')
+    print(f"[竞价过滤] 保留 {len(keep_df)}，取消 {len(cancel_df)}，输出: {output_file}")
+    return keep_df, cancel_df
+
+
 def main():
     # 解析命令行参数
     parser = argparse.ArgumentParser(description='A股量化交易决策辅助工具')
@@ -63,11 +93,35 @@ def main():
                         help='禁用市场状态自适应参数')
     parser.add_argument('--no-layer', action='store_true',
                         help='禁用分层策略，使用传统单层策略')
+    parser.add_argument('--auction-check', action='store_true',
+                        help='竞价过滤：生成计划后进行集合竞价过滤（需开盘前运行）')
+    parser.add_argument('--auction-only', action='store_true',
+                        help='仅执行竞价过滤，不重新生成计划')
+    parser.add_argument('--auction-input', type=str, default=OUTPUT_CSV,
+                        help='竞价过滤输入计划文件路径')
+    parser.add_argument('--auction-output', type=str, default='data/trading_plan_auction.csv',
+                        help='竞价过滤输出文件路径')
     
     args = parser.parse_args()
     
     # 打印头部
     print_header()
+
+    if args.auction_only:
+        print("\n⏱️ 仅执行竞价过滤...")
+        keep_df, _ = run_auction_filter(
+            plan_df=None,
+            input_file=args.auction_input,
+            output_file=args.auction_output,
+        )
+        if keep_df is not None and not keep_df.empty:
+            print("\n🔔 竞价过滤后推送交易信号...")
+            success_count = notification_manager.send_trading_plan(keep_df)
+            if success_count > 0:
+                print(f"✅ 已成功推送到 {success_count} 个渠道")
+            else:
+                print("❌ 推送失败，请检查配置")
+        return
     
     # Step 1: 检查大盘风险
     if not args.skip_risk_check:
@@ -127,6 +181,17 @@ def main():
     # Step 4: 输出结果
     print_trading_plan(plan, market_status=market_status)
     save_trading_plan(plan)
+
+    if args.auction_check:
+        print("\n🧪 竞价过滤中（请在开盘前运行）...")
+        keep_df, _ = run_auction_filter(plan_df=plan, output_file=args.auction_output)
+        if keep_df is not None and not keep_df.empty:
+            print("\n🔔 竞价过滤后推送交易信号...")
+            success_count = notification_manager.send_trading_plan(keep_df)
+            if success_count > 0:
+                print(f"✅ 已成功推送到 {success_count} 个渠道")
+            else:
+                print("❌ 推送失败，请检查配置")
     
     # Step 5: 推送通知
     if not plan.empty:

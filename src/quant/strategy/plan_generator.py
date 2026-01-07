@@ -38,7 +38,8 @@ from .news_risk_analyzer import news_risk_analyzer
 def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
                           use_position_limit: bool = True,
                           use_layer_strategy: bool = None,
-                          ignore_holdings: bool = False) -> pd.DataFrame:
+                          ignore_holdings: bool = False,
+                          expert_info: dict = None) -> pd.DataFrame:
     """
     生成交易计划
     
@@ -76,6 +77,11 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
         )
 
     plan_df = _attach_style_weights(plan_df)
+    
+    # 附加专家见解信息到 DataFrame 属性中，以便后续保存报告时使用
+    if expert_info:
+        plan_df.attrs['expert_info'] = expert_info
+        
     return plan_df
 
 
@@ -458,8 +464,8 @@ def save_trading_plan(plan_df: pd.DataFrame, filepath: str = OUTPUT_CSV):
     """
     保存交易计划到CSV和Markdown文件
     """
-    if plan_df.empty:
-        print(f"\n[信息] 无交易计划需要保存")
+    if plan_df.empty and not plan_df.attrs.get('expert_info'):
+        print(f"\n[信息] 无交易计划且无专家见解，跳过保存")
         return
     
     try:
@@ -486,6 +492,16 @@ def save_markdown_report(plan_df: pd.DataFrame, filepath: str):
         weight_text = plan_df["风格基准权重"].iloc[0]
         if weight_text:
             lines.append(f"> 🧭 **风格基准权重**：{weight_text}\n")
+
+    # 展示 AI 专家见解
+    expert_info = plan_df.attrs.get('expert_info')
+    if expert_info:
+        lines.append("## 🧠 AI 专家见解解读")
+        lines.append(f"- **核心观点**：{expert_info.get('summary', '无')}")
+        lines.append(f"- **情绪评分**：{expert_info.get('sentiment_score', 0.0):.2f} ({'看多' if expert_info.get('sentiment_score', 0.0) > 0 else '看空' if expert_info.get('sentiment_score', 0.0) < 0 else '中性'})")
+        lines.append(f"- **中小盘风险**：{'⚠️ 存在诱多风险' if expert_info.get('small_cap_risk') else '✅ 风险不明显'}")
+        lines.append(f"- **操作建议**：**{expert_info.get('action_advice', '按原计划执行')}**")
+        lines.append("\n")
 
     is_layer = 'layer' in plan_df.columns
     

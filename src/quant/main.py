@@ -33,6 +33,7 @@ from .utils.notifier import notification_manager
 from .strategy.auction_filter import apply_auction_filters
 from .strategy.style_benchmark import get_style_benchmark_series
 from .strategy.sector_strength import generate_concept_strength_report
+from .strategy.expert_analyzer import expert_analyzer
 
 
 def print_header():
@@ -44,12 +45,12 @@ def print_header():
     print("=" * 70)
 
 
-def update_market_regime(sentiment: float = 0.0) -> str:
+def update_market_regime(sentiment: float = 0.0, small_cap_risk_override: bool = False) -> str:
     try:
         # 获取中小盘风险监控配置
         from config.config import MONITOR_SMALL_CAP_RISK
-        small_cap_risk = False
-        if MONITOR_SMALL_CAP_RISK:
+        small_cap_risk = small_cap_risk_override
+        if MONITOR_SMALL_CAP_RISK and not small_cap_risk:
             try:
                 from .core.data_fetcher import get_stock_daily_history
                 # 中证1000 (sh000852)
@@ -77,7 +78,7 @@ def update_market_regime(sentiment: float = 0.0) -> str:
             if info and info.get("weights"):
                 print(f"[风格基准] 权重: {info.get('weights')}")
             if sentiment != 0:
-                print(f"🎭 专家情绪干预: {sentiment} ({'正面' if sentiment > 0 else '负面'})")
+                print(f"🎭 情绪干预: {sentiment:.2f} ({'正面' if sentiment > 0 else '负面'})")
             return result.get("regime_name", "")
 
         index_df = get_index_daily_history()
@@ -154,25 +155,33 @@ def main():
     
     args = parser.parse_args()
     
+    # Step 0: 自动分析专家见解 (如果存在)
+    expert_file = "data/expert_opinion.txt"
+    ai_sentiment = 0.0
+    small_cap_risk_from_ai = False
+    expert_summary = ""
+    expert_analysis = None
+    
+    if os.path.exists(expert_file):
+        with open(expert_file, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+            if content:
+                print("\n🧠 正在通过 AI 分析专家见解...")
+                expert_analysis = expert_analyzer.analyze_opinion(content)
+                ai_sentiment = expert_analysis.get('sentiment_score', 0.0)
+                small_cap_risk_from_ai = expert_analysis.get('small_cap_risk', False)
+                expert_summary = expert_analysis.get('summary', '')
+                
+                print(f"🤖 AI 观点总结: {expert_summary}")
+                print(f"📊 AI 情绪评分: {ai_sentiment} | 中小盘风险: {'有' if small_cap_risk_from_ai else '无'}")
+                print(f"💡 AI 操作建议: {expert_analysis.get('action_advice', '')}")
+
+    # 如果命令行没传 sentiment，则使用 AI 分析的结果
+    final_sentiment = args.sentiment if args.sentiment != 0 else ai_sentiment
+
     # 打印头部
     print_header()
 
-    if args.auction_only:
-        print("\n⏱️ 仅执行竞价过滤...")
-        keep_df, _ = run_auction_filter(
-            plan_df=None,
-            input_file=args.auction_input,
-            output_file=args.auction_output,
-        )
-        if keep_df is not None and not keep_df.empty:
-            print("\n🔔 竞价过滤后推送交易信号...")
-            success_count = notification_manager.send_trading_plan(keep_df)
-            if success_count > 0:
-                print(f"✅ 已成功推送到 {success_count} 个渠道")
-            else:
-                print("❌ 推送失败，请检查配置")
-        return
-    
     # Step 1: 检查大盘风险
     if not args.skip_risk_check:
         print("\n📈 正在检查大盘风险...")
@@ -186,14 +195,17 @@ def main():
     else:
         print("\n⏭️ 已跳过大盘风险检查")
     
-    # Step 1.5: 更新市场状态（可选）
+    # Step 1.5: 更新市场状态
     market_status = ""
     if args.no_adaptive:
         adaptive_strategy.reset()
         print("\n⏭️ 已禁用自适应参数")
     else:
         print("\n🧭 正在识别市场状态...")
-        market_status = update_market_regime(sentiment=args.sentiment)
+        market_status = update_market_regime(
+            sentiment=final_sentiment, 
+            small_cap_risk_override=small_cap_risk_from_ai
+        )
 
     # Step 2: 获取股票池
     print("\n📊 正在获取股票池...")
@@ -229,8 +241,9 @@ def main():
     plan = generate_trading_plan(
         stock_pool, 
         verbose=True,
-        ignore_holdings=args.ignore_holdings, # Added this line
-        use_layer_strategy=use_layer
+        ignore_holdings=args.ignore_holdings,
+        use_layer_strategy=use_layer,
+        expert_info=expert_analysis
     )
     
     # Step 4: 输出结果

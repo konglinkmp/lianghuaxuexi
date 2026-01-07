@@ -225,10 +225,16 @@ class BarkNotifier:
         if not self.device_key:
             return False
         
-        url = f"{self.server}/{self.device_key}/{urllib.parse.quote(title)}/{urllib.parse.quote(content)}"
+        # 使用 POST 请求以支持更长的消息内容
+        url = f"{self.server}/push"
+        data = {
+            "title": title,
+            "body": content,
+            "device_key": self.device_key
+        }
         
         try:
-            response = requests.get(url, timeout=10)
+            response = requests.post(url, json=data, timeout=10)
             result = response.json()
             if result.get('code') == 200:
                 return True

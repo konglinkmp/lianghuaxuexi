@@ -12,6 +12,9 @@ cd "$SCRIPT_DIR"
 LOG_FILE="$SCRIPT_DIR/logs/daily_run.log"
 mkdir -p "$SCRIPT_DIR/logs"
 
+# 每次运行前清理旧日志
+rm -f "$LOG_FILE"
+
 echo "--------------------------------------------------" >> "$LOG_FILE"
 echo "🚀 开始运行每日计划: $(date '+%Y-%m-%d %H:%M:%S')" >> "$LOG_FILE"
 

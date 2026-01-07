@@ -3,8 +3,9 @@
 实现稳健层和激进层的差异化选股与风控逻辑
 """
 
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import pandas as pd
+import numpy as np
 from .stock_classifier import (
     stock_classifier,
     STOCK_TYPE_HOT_MONEY,
@@ -446,6 +447,114 @@ class LayerStrategy:
             return pd.DataFrame()
         
         return pd.DataFrame(all_plans)
+    
+    def check_layer_correlation(
+        self,
+        conservative_stocks: List[str],
+        aggressive_stocks: List[str],
+        lookback_days: int = 60
+    ) -> Dict:
+        """
+        检测稳健层和激进层股票的相关性
+        
+        如果两层股票高度相关，在大跌时可能同时亏损，无法分散风险
+        
+        Args:
+            conservative_stocks: 稳健层股票代码列表
+            aggressive_stocks: 激进层股票代码列表
+            lookback_days: 相关性计算回看天数
+            
+        Returns:
+            Dict: {
+                'avg_correlation': float,  # 平均相关系数
+                'risk_level': 'HIGH' | 'MEDIUM' | 'LOW',
+                'warning': str,  # 警告信息
+                'detail': str   # 详细说明
+            }
+        """
+        if not conservative_stocks or not aggressive_stocks:
+            return {
+                'avg_correlation': 0.0,
+                'risk_level': 'LOW',
+                'warning': '',
+                'detail': '单层股票不足，跳过相关性检测'
+            }
+        
+        # 收集收益率序列
+        all_returns = {}
+        
+        for code in conservative_stocks + aggressive_stocks:
+            try:
+                df = get_stock_daily_history(code, days=lookback_days + 10)
+                if df is not None and len(df) >= lookback_days:
+                    returns = df['close'].pct_change().dropna().tail(lookback_days)
+                    all_returns[code] = returns
+            except Exception:
+                continue
+        
+        if len(all_returns) < 2:
+            return {
+                'avg_correlation': 0.0,
+                'risk_level': 'LOW',
+                'warning': '',
+                'detail': '有效数据不足，跳过相关性检测'
+            }
+        
+        # 计算跨层相关性
+        correlations = []
+        
+        for cons_code in conservative_stocks:
+            if cons_code not in all_returns:
+                continue
+            for aggr_code in aggressive_stocks:
+                if aggr_code not in all_returns:
+                    continue
+                
+                try:
+                    cons_returns = all_returns[cons_code]
+                    aggr_returns = all_returns[aggr_code]
+                    
+                    # 对齐索引
+                    common_idx = cons_returns.index.intersection(aggr_returns.index)
+                    if len(common_idx) < 20:
+                        continue
+                    
+                    corr = cons_returns.loc[common_idx].corr(aggr_returns.loc[common_idx])
+                    if not np.isnan(corr):
+                        correlations.append(corr)
+                except Exception:
+                    continue
+        
+        if not correlations:
+            return {
+                'avg_correlation': 0.0,
+                'risk_level': 'LOW',
+                'warning': '',
+                'detail': '无法计算相关性'
+            }
+        
+        avg_corr = np.mean(correlations)
+        
+        # 评估风险等级
+        if avg_corr > 0.7:
+            risk_level = 'HIGH'
+            warning = f'⚠️ 层间相关性过高 ({avg_corr:.2f})，分散效果有限'
+            detail = '稳健层和激进层股票高度相关，在市场下跌时可能同时亏损。建议选择相关性更低的股票。'
+        elif avg_corr > 0.5:
+            risk_level = 'MEDIUM'
+            warning = f'⚠️ 层间相关性偏高 ({avg_corr:.2f})'
+            detail = '两层股票存在一定相关性，分散效果一般。'
+        else:
+            risk_level = 'LOW'
+            warning = ''
+            detail = f'层间相关性正常 ({avg_corr:.2f})，分散效果良好。'
+        
+        return {
+            'avg_correlation': round(avg_corr, 3),
+            'risk_level': risk_level,
+            'warning': warning,
+            'detail': detail
+        }
 
 
 # 创建全局策略实例

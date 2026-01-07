@@ -2,30 +2,62 @@
 
 一个基于 Python 的 A 股量化交易决策辅助系统，帮助你筛选股票、生成交易计划、回测策略效果。
 
-✨ **新增分层策略**：将资金分为稳健层（20%）和激进层（80%），自动分类股票并采用差异化风控策略。
+✨ **核心功能**：
+- 🎯 **分层策略**：稳健层（20%）+ 激进层（80%），差异化风控
+- 🛡️ **智能风控**：分级回撤控制、月度回撤管理、AI 新闻风险分析
+- 📊 **专业回测**：含幸存者偏差警告、参数敏感性测试
+- 📱 **消息推送**：支持 Bark、钉钉、企业微信
 
 ---
 
-## 🚀 快速开始
+## 🆕 首次使用（新人必读）
+
+### 第一步：克隆项目并安装依赖
 
 ```bash
-# 1. 进入项目目录
+# 1. 克隆代码仓库
+git clone <your-repo-url> ~/workspace/量化
 cd ~/workspace/量化
 
-# 2. 激活虚拟环境
+# 2. 创建虚拟环境（推荐 Python 3.11+）
+python3 -m venv venv
+
+# 3. 激活虚拟环境
 source venv/bin/activate
 
-# 3. 更新账户数据（可选，推荐）
-# 编辑 update_holdings.py 填入最新资金和持仓
-python update_holdings.py
+# 4. 安装依赖
+pip install -r requirements.txt
 
-# 4. 运行主程序
-# 正常模式（自动读取持仓和资金）
-PYTHONPATH=src python -m quant.main
-
-# 忽略持仓模式（假设资金充足，查看全量推荐）
-PYTHONPATH=src python -m quant.main --ignore-holdings
+# 5. 验证安装是否成功
+PYTHONPATH=src python -c "import quant; print('✅ 安装成功！')"
 ```
+
+### 第二步：首次运行
+
+```bash
+# 激活环境（每次使用前都要执行）
+source venv/bin/activate
+
+# 运行主程序（生成明日交易计划）
+PYTHONPATH=src python -m quant.main --ignore-holdings
+
+# 查看生成的交易计划
+open data/trading_plan.csv  # Mac
+# 或
+cat data/trading_plan.csv   # 命令行查看
+```
+
+### 第三步：配置你的资金和持仓（可选）
+
+```bash
+# 编辑 update_holdings.py，填入你的资金和持仓
+# 然后运行：
+python update_holdings.py
+```
+
+---
+
+## 🚀 日常使用
 
 ---
 
@@ -319,20 +351,37 @@ PYTHONPATH=src python -m quant.main --auction-only
 
 ### 场景八：辅助工具（快速诊断）
 
-为了方便日常快速查看，项目中提供了两个独立的辅助工具：
+为了方便日常快速查看，项目中提供了多个独立的辅助工具：
 
 #### 1. 持仓快速扫描器
 一键查看当前所有持仓的技术面趋势（是否在 MA20 之上）。
 ```bash
-# 运行持仓扫描
 python tools/check_holdings.py
 ```
 
 #### 2. 个股深度诊断器
 对任意指定的股票进行深度技术面+基本面分析。
 ```bash
-# 诊断指定股票（如：航天发展）
 python tools/analyze_stock.py 000547
+```
+
+#### 3. 参数敏感性测试（新增）
+测试策略参数的稳定性，识别过拟合风险。
+```bash
+# 快速模式（9组参数组合）
+python tools/run_sensitivity_test.py --quick --limit 5
+
+# 完整模式（135组参数组合）
+python tools/run_sensitivity_test.py --limit 10 --output outputs/sensitivity.csv
+```
+
+输出示例：
+```
+🟢 参数稳定性: 75.2/100 - ✅ 高 (策略稳定)
+
+🏆 最佳参数组合:
+   - MA_SHORT: 20
+   - STOP_LOSS_RATIO: 0.05
 ```
 
 ---

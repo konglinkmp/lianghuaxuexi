@@ -17,9 +17,10 @@ from ..strategy.strategy import (
     calculate_take_profit,
     calculate_ma,
 )
-from config.config import MA_SHORT
+from config.config import MA_SHORT, HISTORY_DAYS
 from .market_regime import adaptive_strategy, AdaptiveParameters
 from ..core.transaction_cost import default_cost_model
+from .survivorship_checker import survivorship_checker
 
 
 def is_limit_down(current_price: float, prev_close: float, threshold: float = 0.098) -> bool:
@@ -180,6 +181,11 @@ def backtest_stock(
             price_above_ma = current_price > current['ma20']
             volume_increase = current['volume'] > prev['volume'] * params.volume_threshold
             price_not_too_high = current_price <= current['ma20'] * (1 + params.max_price_deviation)
+            
+            # 检查是否涨停：开盘价已涨停则无法买入
+            if is_limit_up(current['open'], prev['close']):
+                # 涨停无法买入，跳过
+                continue
             
             if price_above_ma and volume_increase and price_not_too_high:
                 in_position = True
@@ -430,6 +436,39 @@ def print_backtest_report(result: BacktestResult):
             print(f"{pnl_emoji} {trade['name']}({trade['symbol']}) | "
                   f"买入:{trade['entry_price']} → 卖出:{trade['exit_price']} | "
                   f"{trade['exit_reason']} | 收益:{trade['pnl_pct']*100:.2f}%")
+    
+    # 幸存者偏差风险警告
+    _print_survivorship_warning(result)
+
+
+def _print_survivorship_warning(result: BacktestResult):
+    """打印幸存者偏差风险警告"""
+    if not result.trades:
+        return
+    
+    # 获取回测的时间跨度
+    df_trades = pd.DataFrame(result.trades)
+    if 'entry_date' not in df_trades.columns:
+        return
+    
+    try:
+        earliest_date = df_trades['entry_date'].min()
+        if hasattr(earliest_date, 'strftime'):
+            start_str = earliest_date.strftime('%Y-%m-%d')
+        else:
+            start_str = str(earliest_date)[:10]
+        
+        # 构造一个简单的股票池用于检测
+        stock_pool = df_trades[['symbol', 'name']].drop_duplicates()
+        stock_pool = stock_pool.rename(columns={'symbol': '代码', 'name': '名称'})
+        
+        # 执行检测
+        bias_result = survivorship_checker.check(stock_pool, start_str)
+        
+        # 打印警告
+        print(survivorship_checker.format_warning(bias_result))
+    except Exception as e:
+        print(f"\n[提示] 幸存者偏差检测跳过: {e}")
 
 
 if __name__ == "__main__":

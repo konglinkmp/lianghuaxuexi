@@ -116,6 +116,16 @@ def _generate_layer_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
         ignore_holdings=ignore_holdings,
     )
     
+    # 层间相关性检测
+    if verbose and layer_signals['conservative'] and layer_signals['aggressive']:
+        cons_codes = [s['代码'] for s in layer_signals['conservative']]
+        aggr_codes = [s['代码'] for s in layer_signals['aggressive']]
+        
+        corr_result = strategy.check_layer_correlation(cons_codes, aggr_codes)
+        if corr_result['warning']:
+            print(f"\n{corr_result['warning']}")
+            print(f"   {corr_result['detail']}")
+    
     # 格式化为DataFrame
     return strategy.format_layer_plans(layer_signals)
 

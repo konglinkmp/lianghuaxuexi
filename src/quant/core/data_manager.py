@@ -11,10 +11,16 @@ from typing import Optional, List, Dict
 from config.config import DB_PATH
 
 class DataManager:
-    def __init__(self, db_path: str = DB_PATH):
+    def __init__(self, db_path: str = DB_PATH, cache_ttl_hours: int = 4):
         self.db_path = db_path
         self._ensure_db_dir()
         self._init_tables()
+        
+        # 内存缓存
+        self._memory_cache: Dict[str, pd.DataFrame] = {}
+        self._cache_timestamps: Dict[str, datetime] = {}
+        self._cache_ttl_hours = cache_ttl_hours
+        self._cache_max_size = 500  # 最大缓存条目数
 
     def _ensure_db_dir(self):
         """确保数据库目录存在"""
@@ -183,5 +189,83 @@ class DataManager:
         result = cursor.fetchone()
         conn.close()
         return result[0] if result else None
+    
+    def get_stock_daily_cached(
+        self,
+        code: str,
+        start_date: str = None,
+        end_date: str = None
+    ) -> pd.DataFrame:
+        """
+        带内存缓存的数据获取
+        
+        Args:
+            code: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+            
+        Returns:
+            pd.DataFrame: 日线数据
+        """
+        from datetime import timedelta
+        
+        cache_key = f"{code}_{start_date}_{end_date}"
+        
+        # 检查内存缓存
+        if cache_key in self._memory_cache:
+            cache_time = self._cache_timestamps.get(cache_key)
+            if cache_time and (datetime.now() - cache_time).total_seconds() < self._cache_ttl_hours * 3600:
+                return self._memory_cache[cache_key].copy()
+        
+        # 从数据库读取
+        df = self.get_stock_daily(code, start_date, end_date)
+        
+        # 更新缓存（如果缓存未满）
+        if len(self._memory_cache) < self._cache_max_size:
+            self._memory_cache[cache_key] = df.copy()
+            self._cache_timestamps[cache_key] = datetime.now()
+        else:
+            # 缓存已满，清理最旧的条目
+            self._cleanup_cache()
+            self._memory_cache[cache_key] = df.copy()
+            self._cache_timestamps[cache_key] = datetime.now()
+        
+        return df
+    
+    def _cleanup_cache(self, keep_ratio: float = 0.5):
+        """
+        清理过期或最旧的缓存条目
+        
+        Args:
+            keep_ratio: 保留的缓存比例
+        """
+        if not self._cache_timestamps:
+            return
+        
+        # 按时间戳排序，删除最旧的一半
+        sorted_keys = sorted(
+            self._cache_timestamps.keys(),
+            key=lambda k: self._cache_timestamps[k]
+        )
+        
+        remove_count = int(len(sorted_keys) * (1 - keep_ratio))
+        for key in sorted_keys[:remove_count]:
+            self._memory_cache.pop(key, None)
+            self._cache_timestamps.pop(key, None)
+    
+    def clear_cache(self):
+        """清空所有内存缓存"""
+        self._memory_cache.clear()
+        self._cache_timestamps.clear()
+    
+    def get_cache_stats(self) -> Dict:
+        """获取缓存统计信息"""
+        return {
+            'cache_size': len(self._memory_cache),
+            'max_size': self._cache_max_size,
+            'ttl_hours': self._cache_ttl_hours,
+            'usage_pct': f"{len(self._memory_cache) / self._cache_max_size * 100:.1f}%"
+        }
 
 data_manager = DataManager()
+

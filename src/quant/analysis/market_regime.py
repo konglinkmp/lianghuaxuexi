@@ -17,6 +17,8 @@ from config.config import (
     TRAILING_STOP_RATIO,
     POSITION_RATIO,
     MAX_POSITIONS,
+    EXPERT_SENTIMENT_OVERRIDE,
+    MONITOR_SMALL_CAP_RISK,
 )
 
 
@@ -130,6 +132,8 @@ class MarketRegimeDetector:
             price_above_long=price_above_long,
             market_breadth=market_breadth,
             style_drift=style_drift,
+            sentiment=kwargs.get("sentiment", EXPERT_SENTIMENT_OVERRIDE),
+            small_cap_risk=kwargs.get("small_cap_risk", False)
         )
 
         metrics = {
@@ -140,6 +144,8 @@ class MarketRegimeDetector:
             "ma_alignment": self._check_ma_alignment(ma_short, ma_medium, ma_long),
             "price_position": self._calculate_price_position(price_series, ma_medium),
             "style_drift": style_drift,
+            "small_cap_risk": kwargs.get("small_cap_risk", False),
+            "sentiment": kwargs.get("sentiment", EXPERT_SENTIMENT_OVERRIDE)
         }
 
         return regime, metrics
@@ -209,21 +215,36 @@ class MarketRegimeDetector:
         price_above_long: float,
         market_breadth: float,
         style_drift: float = 0.0,
+        sentiment: float = 0.0,
+        small_cap_risk: bool = False
     ) -> MarketRegime:
-        # 风格踩踏判定：如果小票大幅跑输大盘（如20天跑输5%），强制进入下跌趋势
-        if style_drift < -0.05:
+        # 1. 极端情绪干预
+        if sentiment <= -0.8:
+            return MarketRegime.TREND_DOWN
+        
+        # 2. 风格踩踏或中小盘诱多风险判定
+        # 如果风格大幅跑输，或者专家提示中小盘诱多风险
+        if style_drift < -0.05 or (small_cap_risk and sentiment < 0):
             return MarketRegime.TREND_DOWN
 
-        if volatility > 0.25:
+        # 3. 波动率判定
+        if volatility > 0.30: # 调高阈值，因为情绪因子会辅助
             return MarketRegime.HIGH_VOLATILITY
+        
+        # 4. 趋势判定
+        if adx > 25:
+            # 结合情绪因子调整门槛
+            bull_threshold = 0.6 - (sentiment * 0.1)
+            bear_threshold = 0.4 - (sentiment * 0.1)
+            
+            if price_above_medium > bull_threshold and price_above_long > (bull_threshold - 0.05):
+                return MarketRegime.TREND_UP
+            if price_above_medium < bear_threshold and price_above_long < (bear_threshold + 0.05):
+                return MarketRegime.TREND_DOWN
+
+        # 5. 低波动/震荡
         if volatility < 0.15 and volatility > 0:
             return MarketRegime.LOW_VOLATILITY
-
-        if adx > 25:
-            if price_above_medium > 0.6 and price_above_long > 0.55:
-                return MarketRegime.TREND_UP
-            if price_above_medium < 0.4 and price_above_long < 0.45:
-                return MarketRegime.TREND_DOWN
 
         return MarketRegime.CONSOLIDATION
 
@@ -236,10 +257,34 @@ class AdaptiveStrategy:
         self.current_params = AdaptiveParameters()
         self.regime_history = []
 
-    def update_regime(self, index_prices: pd.Series, benchmark_prices: Optional[pd.Series] = None) -> Dict:
-        regime, metrics = self.regime_detector.detect(index_prices, benchmark_prices=benchmark_prices)
+    def update_regime(self, index_prices: pd.Series, benchmark_prices: Optional[pd.Series] = None, **kwargs) -> Dict:
+        # 提取情绪和中小盘风险
+        sentiment = kwargs.get("sentiment", EXPERT_SENTIMENT_OVERRIDE)
+        small_cap_risk = kwargs.get("small_cap_risk", False)
+        
+        regime, metrics = self.regime_detector.detect(
+            index_prices, 
+            benchmark_prices=benchmark_prices,
+            sentiment=sentiment,
+            small_cap_risk=small_cap_risk
+        )
         self.current_regime = regime
-        self.current_params = AdaptiveParameters.for_regime(regime, metrics.get("volatility", 0.2))
+        
+        # 根据情绪因子进一步缩放参数
+        base_params = AdaptiveParameters.for_regime(regime, metrics.get("volatility", 0.2))
+        
+        if sentiment < 0:
+            # 情绪负面：收紧止损，降低仓位
+            base_params.stop_loss_ratio *= (1 + abs(sentiment) * 0.5) # 止损更紧（数值变大，但逻辑上是更早触发）
+            # 注意：这里的 stop_loss_ratio 是 0.05 这种，数值变大意味着跌得更少就止损
+            base_params.position_ratio *= (1 - abs(sentiment) * 0.5)
+            base_params.max_positions = max(3, int(base_params.max_positions * (1 - abs(sentiment) * 0.3)))
+        elif sentiment > 0:
+            # 情绪正面：放宽止损，增加仓位
+            base_params.position_ratio *= (1 + sentiment * 0.3)
+            base_params.max_positions = min(15, int(base_params.max_positions * (1 + sentiment * 0.2)))
+
+        self.current_params = base_params
 
         self.regime_history.append(
             {

@@ -187,3 +187,16 @@ MACD_GOLDEN_CROSS_SCORE = 15  # 金叉加分
 MACD_DIVERGENCE_SCORE = 20    # 背离加分
 MACD_ZERO_AXIS_SCORE = 5      # DIF/DEA零轴之上加分
 
+# ============ 专家见解与情绪因子 ============
+# 专家情绪调节因子 (-1.0 到 1.0)
+# -1.0: 极度悲观，0.0: 中性，1.0: 极度乐观
+EXPERT_SENTIMENT_OVERRIDE = 0.0
+
+# 是否监控中小盘风险 (中证1000/2000)
+MONITOR_SMALL_CAP_RISK = True
+
+# 回踩买入参考均线周期
+PULLBACK_MA_PERIOD = 5
+
+# 价格偏离5日线比例阈值（超过此比例视为追高，建议等待回踩）
+PULLBACK_DEVIATION_THRESHOLD = 0.02  # 2%

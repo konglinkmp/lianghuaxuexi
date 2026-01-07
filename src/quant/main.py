@@ -44,21 +44,51 @@ def print_header():
     print("=" * 70)
 
 
-def update_market_regime() -> str:
+def update_market_regime(sentiment: float = 0.0) -> str:
     try:
+        # 获取中小盘风险监控配置
+        from config.config import MONITOR_SMALL_CAP_RISK
+        small_cap_risk = False
+        if MONITOR_SMALL_CAP_RISK:
+            try:
+                from .core.data_fetcher import get_stock_daily_history
+                # 中证1000 (sh000852)
+                df_1000 = get_stock_daily_history("sh000852", days=10)
+                if df_1000 is not None and len(df_1000) >= 5:
+                    recent = df_1000.iloc[-5:]
+                    price_change = (recent['close'].iloc[-1] / recent['close'].iloc[0] - 1)
+                    if price_change > 0.03: # 短期涨幅较大
+                        last_day = recent.iloc[-1]
+                        if last_day['close'] < last_day['open']:
+                            small_cap_risk = True
+                            print("⚠️ 预警：中证1000出现高位回踩迹象")
+            except Exception as e:
+                print(f"[警告] 获取中小盘指数数据失败: {e}")
+
         benchmark_series, info = get_style_benchmark_series()
         if benchmark_series is not None and not benchmark_series.empty:
-            result = adaptive_strategy.update_regime(benchmark_series)
+            result = adaptive_strategy.update_regime(
+                benchmark_series, 
+                benchmark_prices=benchmark_series,
+                sentiment=sentiment,
+                small_cap_risk=small_cap_risk
+            )
             adaptive_strategy.print_status()
             if info and info.get("weights"):
                 print(f"[风格基准] 权重: {info.get('weights')}")
+            if sentiment != 0:
+                print(f"🎭 专家情绪干预: {sentiment} ({'正面' if sentiment > 0 else '负面'})")
             return result.get("regime_name", "")
 
         index_df = get_index_daily_history()
         if index_df.empty:
             return ""
 
-        result = adaptive_strategy.update_regime(index_df["close"])
+        result = adaptive_strategy.update_regime(
+            index_df["close"],
+            sentiment=sentiment,
+            small_cap_risk=small_cap_risk
+        )
         adaptive_strategy.print_status()
         return result.get("regime_name", "")
     except Exception as exc:
@@ -117,6 +147,8 @@ def main():
                         help='竞价过滤输入计划文件路径')
     parser.add_argument('--auction-output', type=str, default='data/trading_plan_auction.csv',
                         help='竞价过滤输出文件路径')
+    parser.add_argument('--sentiment', type=float, default=0.0,
+                        help='专家情绪因子 (-1.0 到 1.0)')
     
     parser.add_argument('--ignore-holdings', action='store_true', help='忽略当前持仓（假设资金充足）')
     
@@ -161,7 +193,7 @@ def main():
         print("\n⏭️ 已禁用自适应参数")
     else:
         print("\n🧭 正在识别市场状态...")
-        market_status = update_market_regime()
+        market_status = update_market_regime(sentiment=args.sentiment)
 
     # Step 2: 获取股票池
     print("\n📊 正在获取股票池...")

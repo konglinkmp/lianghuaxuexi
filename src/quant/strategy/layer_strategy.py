@@ -41,6 +41,9 @@ from config.config import (
     MAX_SINGLE_POSITION_RATIO,
     RISK_CONTRIBUTION_LIMIT,
     LIQUIDITY_ADV_LIMIT,
+    PULLBACK_MA_PERIOD,
+    PULLBACK_DEVIATION_THRESHOLD,
+    EXPERT_SENTIMENT_OVERRIDE,
 )
 
 
@@ -264,11 +267,22 @@ class LayerStrategy:
                     if not strength_filter.is_allowed(industry, concepts, layer=layer):
                         continue
                 
-                # 计算MA20
+                # 计算MA20和MA5（用于回踩判断）
                 ma20 = calculate_ma(df, 20).iloc[-1] if len(df) >= 20 else close_price
+                ma5 = calculate_ma(df, PULLBACK_MA_PERIOD).iloc[-1] if len(df) >= PULLBACK_MA_PERIOD else close_price
+                
+                # 计算价格偏离度
+                pullback_deviation = (close_price / ma5 - 1)
+                is_overextended = pullback_deviation > PULLBACK_DEVIATION_THRESHOLD
                 
                 # 根据分层获取参数并计算止损止盈
                 layer_params = self._get_layer_parameters(layer)
+                
+                # 情绪因子干预风控参数
+                sentiment = getattr(risk_state, 'sentiment', EXPERT_SENTIMENT_OVERRIDE)
+                if sentiment < 0:
+                    # 情绪负面：收紧止损
+                    layer_params['stop_loss'] *= (1 + abs(sentiment) * 0.3)
                 
                 # 计算止损止盈价格
                 stop_loss_price = round(close_price * (1 - layer_params['stop_loss']), 2)
@@ -322,6 +336,14 @@ class LayerStrategy:
 
                 # 构建信号
                 concept_text = "，".join(concepts) if concepts else ""
+                
+                # 建议买入逻辑：如果追高，建议回踩买入
+                suggested_buy_price = round(close_price, 2)
+                buy_note = ""
+                if is_overextended:
+                    suggested_buy_price = round(ma5 * (1 + PULLBACK_DEVIATION_THRESHOLD/2), 2)
+                    buy_note = f"⚠️ 当前偏离5日线{pullback_deviation*100:.1f}%，建议回踩至{suggested_buy_price}附近接回"
+                
                 signal = {
                     '代码': code,
                     '名称': name,
@@ -334,15 +356,17 @@ class LayerStrategy:
                     'stock_type': stock_type,
                     'layer': layer,
                     '收盘价': round(close_price, 2),
-                    '建议买入价': round(close_price, 2),
+                    '建议买入价': suggested_buy_price,
+                    '买入备注': buy_note,
                     '止损价': stop_loss_price,
                     '止盈价': take_profit_price,
                     'MA20': round(ma20, 2),
+                    'MA5': round(ma5, 2),
                     '建议股数': position_size,
                     '建议金额': round(position_amount, 2),
                     '仓位比例': f"{position_amount / self.total_capital * 100:.1f}%",
                     'score': classification['score'],
-                    'reasons': '; '.join(classification['reasons'][:2]),  # 只保留前2个原因
+                    'reasons': '; '.join(classification['reasons'][:2]) + (f"; {buy_note}" if buy_note else ""),
                     'ai_risk_level': ai_risk.get('risk_level', 'LOW'),
                     'ai_risk_reason': ai_risk.get('risk_reason', ''),
                     'ai_risk_details': ai_risk.get('details', '')

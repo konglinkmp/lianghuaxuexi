@@ -467,14 +467,10 @@ def save_trading_plan(plan_df: pd.DataFrame, filepath: str = OUTPUT_CSV):
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
         
-        # 保存 CSV
-        plan_df.to_csv(filepath, index=False, encoding='utf-8-sig')
-        print(f"\n[信息] 交易计划已保存至: {filepath}")
-        
         # 保存 Markdown 报告
-        md_path = filepath.replace('.csv', '.md')
+        md_path = filepath.replace('.csv', '.md') if filepath.endswith('.csv') else filepath
         save_markdown_report(plan_df, md_path)
-        print(f"[信息] 详细报告已保存至: {md_path}")
+        print(f"\n[信息] 详细交易报告已保存至: {md_path}")
         
     except Exception as e:
         print(f"\n[错误] 保存计划失败: {e}")
@@ -508,7 +504,9 @@ def save_markdown_report(plan_df: pd.DataFrame, filepath: str):
             'reasons': '推荐理由',
             'ai_risk_reason': 'AI风险提示',
             '建议金额': '建议金额(¥)',
-            '收盘价': '现价'
+            '收盘价': '现价',
+            '建议买入价': '建议买入价',
+            '买入备注': '操作备注'
         }
         temp_df = temp_df.rename(columns=rename_map)
         

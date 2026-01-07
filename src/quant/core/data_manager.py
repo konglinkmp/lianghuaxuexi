@@ -68,6 +68,29 @@ class DataManager:
         # 创建索引以加速查询
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_daily_code_date ON stock_daily (code, date)')
         
+        # 更新日志表（用于智能缓存）
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS update_log (
+            data_type TEXT PRIMARY KEY,
+            updated_date TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+        
+        # 指数日线表
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS index_daily (
+            code TEXT,
+            date TEXT,
+            open REAL,
+            high REAL,
+            low REAL,
+            close REAL,
+            volume REAL,
+            PRIMARY KEY (code, date)
+        )
+        ''')
+        
         conn.commit()
         conn.close()
 
@@ -266,6 +289,83 @@ class DataManager:
             'ttl_hours': self._cache_ttl_hours,
             'usage_pct': f"{len(self._memory_cache) / self._cache_max_size * 100:.1f}%"
         }
+
+    def is_today_updated(self, data_type: str) -> bool:
+        """
+        检查某类型数据今天是否已更新
+        
+        Args:
+            data_type: 数据类型，如 'stock_list', 'index_sh000300'
+        """
+        today = datetime.now().strftime('%Y-%m-%d')
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT updated_date FROM update_log WHERE data_type = ?",
+            (data_type,)
+        )
+        result = cursor.fetchone()
+        conn.close()
+        return result is not None and result[0] == today
+    
+    def mark_today_updated(self, data_type: str):
+        """
+        标记某类型数据今天已更新
+        """
+        today = datetime.now().strftime('%Y-%m-%d')
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO update_log (data_type, updated_date, updated_at) VALUES (?, ?, ?)",
+            (data_type, today, datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        )
+        conn.commit()
+        conn.close()
+    
+    def save_index_daily(self, code: str, df: pd.DataFrame):
+        """保存指数日线数据"""
+        if df.empty:
+            return
+        
+        df = df.copy()
+        df['code'] = code
+        
+        if not pd.api.types.is_string_dtype(df['date']):
+            df['date'] = df['date'].dt.strftime('%Y-%m-%d')
+        
+        data = []
+        for _, row in df.iterrows():
+            data.append((
+                row['code'],
+                row['date'],
+                row.get('open'),
+                row.get('high'),
+                row.get('low'),
+                row.get('close'),
+                row.get('volume')
+            ))
+        
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        cursor.executemany('''
+        INSERT OR REPLACE INTO index_daily (code, date, open, high, low, close, volume)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', data)
+        conn.commit()
+        conn.close()
+    
+    def get_index_daily(self, code: str, days: int = 120) -> pd.DataFrame:
+        """获取指数日线数据"""
+        conn = self._get_conn()
+        query = f"SELECT * FROM index_daily WHERE code = ? ORDER BY date DESC LIMIT {days}"
+        df = pd.read_sql(query, conn, params=(code,))
+        conn.close()
+        
+        if not df.empty:
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.sort_values('date').reset_index(drop=True)
+        
+        return df
 
 data_manager = DataManager()
 

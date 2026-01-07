@@ -56,6 +56,21 @@ def retry(max_attempts: int = 3, delay: float = 1.0):
     return decorator
 
 
+def _is_after_market_close() -> bool:
+    """
+    判断当前是否为收盘后（17:00 之后）
+    这个时间点确保数据源已稳定更新
+    """
+    now = datetime.now()
+    # 周末不交易，但仍然可以使用缓存
+    return now.hour >= 17
+
+
+def _is_trading_day() -> bool:
+    """判断今天是否为交易日（简单判断：周一到周五）"""
+    return datetime.now().weekday() < 5
+
+
 @retry(max_attempts=3, delay=1.0)
 def get_all_a_stock_list() -> pd.DataFrame:
     """
@@ -65,6 +80,15 @@ def get_all_a_stock_list() -> pd.DataFrame:
         DataFrame: 包含 代码、名称 等字段
     """
     global _stock_spot_cache
+    
+    # 智能缓存：收盘后且今天已更新，直接读取本地
+    if _is_after_market_close() and data_manager.is_today_updated('stock_list'):
+        logger.info("使用本地缓存的股票列表（今天已更新）")
+        cached = data_manager.get_stock_meta()
+        if not cached.empty:
+            # 重建缓存以便 PE/PB 查询
+            result = cached.rename(columns={'code': '代码', 'name': '名称'})
+            return result[['代码', '名称']]
     
     logger.info("正在获取全A股列表...")
     start_time = time.time()
@@ -85,6 +109,7 @@ def get_all_a_stock_list() -> pd.DataFrame:
         save_df = result.copy()
         save_df = save_df.rename(columns={'代码': 'code', '名称': 'name'})
         data_manager.save_stock_meta(save_df)
+        data_manager.mark_today_updated('stock_list')  # 标记今天已更新
         logger.info(f"已缓存 {len(save_df)} 条股票基础信息到本地数据库")
     except Exception as e:
         logger.warning(f"保存股票列表到数据库失败: {e}")
@@ -106,8 +131,12 @@ def get_stock_daily_history(symbol: str, days: int = HISTORY_DAYS) -> pd.DataFra
     Returns:
         DataFrame: 包含 日期、开盘、收盘、最高、最低、成交量 等字段
     """
-    # 计算目标结束日期（昨天）
-    target_end_date = (datetime.now() - timedelta(days=1)).date()
+    # 计算目标结束日期
+    # 如果已收盘，目标日期是"今天"，否则是"昨天"
+    if _is_after_market_close():
+        target_end_date = datetime.now().date()
+    else:
+        target_end_date = (datetime.now() - timedelta(days=1)).date()
     target_end_str = target_end_date.strftime('%Y%m%d')
     
     # 1. 检查本地最新日期
@@ -186,6 +215,15 @@ def get_index_daily_history(index_code: str = HS300_CODE, days: int = HISTORY_DA
     Returns:
         DataFrame: 包含 日期、收盘价 等字段
     """
+    cache_key = f'index_{index_code}'
+    
+    # 智能缓存：收盘后且今天已更新，直接读取本地
+    if _is_after_market_close() and data_manager.is_today_updated(cache_key):
+        logger.info(f"使用本地缓存的指数 {index_code} 数据（今天已更新）")
+        cached = data_manager.get_index_daily(index_code, days)
+        if not cached.empty:
+            return cached
+    
     logger.info(f"正在获取指数 {index_code} 数据...")
     
     # 使用新浪接口获取指数数据
@@ -208,6 +246,13 @@ def get_index_daily_history(index_code: str = HS300_CODE, days: int = HISTORY_DA
     # 确保日期为datetime类型
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values('date').reset_index(drop=True)
+    
+    # 保存到本地数据库
+    try:
+        data_manager.save_index_daily(index_code, df)
+        data_manager.mark_today_updated(cache_key)
+    except Exception as e:
+        logger.warning(f"保存指数数据失败: {e}")
     
     # 只取最近N天
     df = df.tail(days).reset_index(drop=True)

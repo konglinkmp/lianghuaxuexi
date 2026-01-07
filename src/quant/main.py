@@ -203,7 +203,6 @@ def main():
     
     # Step 4: 输出结果
     print_trading_plan(plan, market_status=market_status)
-    save_trading_plan(plan)
 
     if ENABLE_CONCEPT_STRENGTH_REPORT:
         try:

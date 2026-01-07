@@ -21,7 +21,12 @@ from src.quant.trade.position_tracker import position_tracker
 from src.quant.utils.notifier import notification_manager
 from src.quant.core.data_fetcher import get_index_daily_history
 from src.quant.strategy.strategy import calculate_ma
+from src.quant.utils.logger import get_logger, setup_logging
 from config.config import OUTPUT_CSV, HS300_CODE, MA_LONG
+
+# 初始化日志
+setup_logging(log_file='monitor.log')
+logger = get_logger('monitor')
 
 # 警报冷却时间（秒），防止重复发送
 ALERT_COOLDOWN = 300 
@@ -58,10 +63,10 @@ def get_cached_ma60():
         
         _ma60_cache['date'] = today
         _ma60_cache['value'] = ma60
-        print(f"[信息] 更新MA60基准: {ma60:.2f}")
+        logger.info(f"更新MA60基准: {ma60:.2f}")
         return ma60
     except Exception as e:
-        print(f"[错误] 计算MA60失败: {e}")
+        logger.error(f"计算MA60失败: {e}")
         return None
 
 def check_market_risk_realtime() -> bool:
@@ -104,7 +109,7 @@ def check_market_risk_realtime() -> bool:
         return False
         
     except Exception as e:
-        print(f"[错误] 检查大盘风险失败: {e}")
+        logger.error(f"检查大盘风险失败: {e}")
         return False
 
 def get_realtime_quotes(codes: list) -> dict:
@@ -133,7 +138,7 @@ def get_realtime_quotes(codes: list) -> dict:
             
         return quotes
     except Exception as e:
-        print(f"[错误] 获取实时行情失败: {e}")
+        logger.error(f"获取实时行情失败: {e}")
         return {}
 
 def send_alert_once(key: str, title: str, content: str):
@@ -146,7 +151,8 @@ def send_alert_once(key: str, title: str, content: str):
         if now - last_time < ALERT_COOLDOWN:
             return
             
-    print(f"\n[警报] {title} - {content}")
+            
+    logger.warning(f"警报触发: {title} - {content}")
     success = notification_manager.send_alert(key.split(':')[0], f"{title}\n{content}")
     if success:
         _alert_history[key] = now
@@ -227,8 +233,8 @@ def monitor_plan(quotes: dict):
 
 def run_monitor(interval: int = 60):
     """运行监控循环"""
-    print(f"🚀 启动盘中监控 (间隔 {interval}秒)...")
-    print("按 Ctrl+C 停止")
+    logger.info(f"启动盘中监控 (间隔 {interval}秒)...")
+    logger.info("按 Ctrl+C 停止")
     
     while True:
         try:
@@ -245,12 +251,12 @@ def run_monitor(interval: int = 60):
             )
             
             if not is_trading_time:
-                print(f"[{current_time}] 非交易时间，休眠中...", end='\r')
+                # 非交易时间每小时打印一次即可，避免刷屏
+                if now.minute == 0 and now.second < interval:
+                    logger.info("非交易时间，监控休眠中...")
                 time.sleep(interval)
                 continue
                 
-            print(f"[{current_time}] 正在监控...", end='\r')
-            
             # 1. 检查大盘
             check_market_risk_realtime()
             
@@ -268,10 +274,13 @@ def run_monitor(interval: int = 60):
             all_codes = list(set(holdings + plan_codes))
             
             if not all_codes:
-                print(f"[{current_time}] 无关注股票", end='\r')
+                if now.minute % 10 == 0 and now.second < interval:
+                    logger.info("无关注股票，继续等待...")
                 time.sleep(interval)
                 continue
                 
+            logger.info(f"正在监控中... (持仓:{len(holdings)} 计划:{len(plan_codes)})")
+            
             # 3. 获取行情
             quotes = get_realtime_quotes(all_codes)
             
@@ -282,10 +291,10 @@ def run_monitor(interval: int = 60):
             time.sleep(interval)
             
         except KeyboardInterrupt:
-            print("\n🛑 监控已停止")
+            logger.info("🛑 监控已停止")
             break
         except Exception as e:
-            print(f"\n[错误] 监控循环异常: {e}")
+            logger.error(f"监控循环异常: {e}")
             time.sleep(interval)
 
 if __name__ == "__main__":

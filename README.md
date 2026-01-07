@@ -45,6 +45,21 @@ PYTHONPATH=src python -m quant.main --ignore-holdings
 open data/trading_plan.csv  # Mac
 # 或
 cat data/trading_plan.csv   # 命令行查看
+
+### 第四步：启动盘中实时监控（可选）
+
+如果你想在交易时间内实时盯盘（监控止损、止盈和买入信号）：
+
+```bash
+# 赋予执行权限
+chmod +x run_monitor.sh
+
+# 启动监控
+./run_monitor.sh
+```
+- 监控程序会自动识别交易时间，非交易时间会自动休眠。
+- 所有的监控记录会保存到 `logs/monitor.log`。
+- 建议配合 Bark 或钉钉机器人使用，效果最佳。
 ```
 
 ### 第三步：配置你的资金和持仓（可选）
@@ -603,6 +618,47 @@ print(f'共 {len(all_trades)} 笔交易，已保存到 data/all_trades.csv')
 
 ---
 
+## ☁️ 云服务器部署与自动化
+
+如果你想让系统每天自动运行并推送结果，可以将其部署在云服务器上。
+
+### 方法一：使用 Crontab 自动运行（推荐）
+
+1. **赋予脚本执行权限**：
+```bash
+chmod +x run_daily.sh
+```
+
+2. **设置定时任务**：
+输入 `crontab -e`，在末尾添加一行（例如每天下午 15:30 运行）：
+```bash
+# 每天周一至周五 15:30 运行
+30 15 * * 1-5 /bin/bash ~/workspace/量化/run_daily.sh
+```
+
+3. **查看运行日志**：
+```bash
+tail -f logs/daily_run.log
+```
+
+### 方法二：使用 Docker 部署
+
+1. **构建镜像**：
+```bash
+docker build -t quant-tool .
+```
+
+2. **运行容器**（挂载数据目录以持久化）：
+```bash
+docker run -d \
+  --name my-quant \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  quant-tool python -m quant.main --ignore-holdings
+```
+
+---
+
 ## ⚠️ 免责声明
 
 本工具仅供学习和研究使用，不构成任何投资建议。股市有风险，投资需谨慎。作者不对任何因使用本工具造成的损失负责。
@@ -610,3 +666,4 @@ print(f'共 {len(all_trades)} 笔交易，已保存到 data/all_trades.csv')
 ---
 
 **Happy Trading! 🚀**
+

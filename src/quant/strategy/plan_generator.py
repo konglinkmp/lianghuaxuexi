@@ -32,6 +32,7 @@ from config.config import (
 )
 from ..trade.position_tracker import position_tracker, portfolio_manager
 from .layer_strategy import LayerStrategy, LAYER_AGGRESSIVE, LAYER_CONSERVATIVE
+from .news_risk_analyzer import news_risk_analyzer
 
 
 def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
@@ -208,6 +209,13 @@ def _generate_single_layer_plan(stock_pool: pd.DataFrame, verbose: bool = True,
             stop_loss = calculate_stop_loss(close_price, ma20, df)
             take_profit = calculate_take_profit(close_price)
             
+            # AI 风险分析
+            ai_risk = news_risk_analyzer.analyze_risk(code, name)
+            if ai_risk.get('risk_level') == 'HIGH':
+                if verbose:
+                    print(f"[AI风险] {name}({code}) 识别为高风险: {ai_risk.get('risk_reason')}，已剔除")
+                continue
+            
             remaining_capital = max_capital - allocated_capital
             if remaining_capital <= 0:
                 if verbose:
@@ -271,7 +279,10 @@ def _generate_single_layer_plan(stock_pool: pd.DataFrame, verbose: bool = True,
                 'MA20': round(ma20, 2),
                 '建议股数': suggested_shares,
                 '建议金额': round(position_amount, 2),
-                '仓位比例': f"{actual_position_ratio * 100:.1f}%"
+                '仓位比例': f"{actual_position_ratio * 100:.1f}%",
+                'ai_risk_level': ai_risk.get('risk_level', 'LOW'),
+                'ai_risk_reason': ai_risk.get('risk_reason', ''),
+                'ai_risk_details': ai_risk.get('details', '')
             })
             
         except Exception as e:
@@ -379,6 +390,14 @@ def _print_stock_row(row, idx: int, prefix: str):
         print(f"    板块强度: {strength_label}")
     if concepts:
         print(f"    概念: {concepts}")
+    
+    # 打印 AI 风险
+    ai_risk_level = row.get('ai_risk_level', 'LOW')
+    ai_risk_reason = row.get('ai_risk_reason', '')
+    if ai_risk_level != 'LOW':
+        risk_emoji = "🔴" if ai_risk_level == "HIGH" else "⚠️"
+        print(f"    {risk_emoji} AI风险提示: {ai_risk_reason}")
+        
     print(f"    收盘价: ¥{row['收盘价']:.2f} | MA20: ¥{row['MA20']:.2f}")
     print(f"    止损价: ¥{row['止损价']:.2f} → 止盈价: ¥{row['止盈价']:.2f}")
     print(f"    建议仓位: {row['建议股数']}股 (约¥{row['建议金额']:.0f}，占{row['仓位比例']})")
@@ -410,6 +429,14 @@ def _print_single_layer_plan(plan_df: pd.DataFrame, market_status: str = ""):
             print(f"    板块强度: {strength_label}")
         if concepts:
             print(f"    概念: {concepts}")
+        
+        # 打印 AI 风险
+        ai_risk_level = row.get('ai_risk_level', 'LOW')
+        ai_risk_reason = row.get('ai_risk_reason', '')
+        if ai_risk_level != 'LOW':
+            risk_emoji = "🔴" if ai_risk_level == "HIGH" else "⚠️"
+            print(f"    {risk_emoji} AI风险提示: {ai_risk_reason}")
+
         print(f"    建议仓位: {row['建议股数']}股 (约¥{row['建议金额']:.0f}，占{row['仓位比例']})")
     
     print("\n" + "=" * 80)
@@ -461,7 +488,7 @@ def save_markdown_report(plan_df: pd.DataFrame, filepath: str):
             return "暂无符合条件的股票"
         
         # 挑选核心字段
-        cols = ['名称', '代码', '收盘价', '止损价', '止盈价', '建议股数', '建议金额', '仓位比例', 'reasons']
+        cols = ['名称', '代码', '收盘价', '建议股数', '建议金额', '仓位比例', 'reasons', 'ai_risk_reason']
         # 检查列是否存在
         existing_cols = [c for c in cols if c in df.columns]
         temp_df = df[existing_cols].copy()
@@ -469,6 +496,7 @@ def save_markdown_report(plan_df: pd.DataFrame, filepath: str):
         # 重命名列名以提高美观度
         rename_map = {
             'reasons': '推荐理由',
+            'ai_risk_reason': 'AI风险提示',
             '建议金额': '建议金额(¥)',
             '收盘价': '现价'
         }

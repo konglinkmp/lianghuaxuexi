@@ -12,6 +12,7 @@ from .stock_classifier import (
     LAYER_AGGRESSIVE,
     LAYER_CONSERVATIVE,
 )
+from .news_risk_analyzer import news_risk_analyzer
 import json
 import os
 from ..trade.position_tracker import position_tracker
@@ -309,6 +310,15 @@ class LayerStrategy:
                 else:
                     conservative_allocated += position_amount
                 
+                # AI 风险分析 (仅对通过初步筛选的股票进行)
+                ai_risk = news_risk_analyzer.analyze_risk(code, name)
+                
+                # 如果是 HIGH 风险，直接剔除
+                if ai_risk.get('risk_level') == 'HIGH':
+                    if verbose:
+                        print(f"[AI风险] {name}({code}) 识别为高风险: {ai_risk.get('risk_reason')}，已剔除")
+                    continue
+
                 # 构建信号
                 concept_text = "，".join(concepts) if concepts else ""
                 signal = {
@@ -331,7 +341,10 @@ class LayerStrategy:
                     '建议金额': round(position_amount, 2),
                     '仓位比例': f"{position_amount / self.total_capital * 100:.1f}%",
                     'score': classification['score'],
-                    'reasons': '; '.join(classification['reasons'][:2])  # 只保留前2个原因
+                    'reasons': '; '.join(classification['reasons'][:2]),  # 只保留前2个原因
+                    'ai_risk_level': ai_risk.get('risk_level', 'LOW'),
+                    'ai_risk_reason': ai_risk.get('risk_reason', ''),
+                    'ai_risk_details': ai_risk.get('details', '')
                 }
                 
                 # 分配到对应层

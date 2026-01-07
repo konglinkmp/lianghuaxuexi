@@ -467,6 +467,39 @@ def calculate_volume_ratio(df: pd.DataFrame, period: int = 20) -> float:
     return 0.0
 
 
+@retry(max_attempts=2, delay=0.5)
+def get_stock_news(symbol: str, limit: int = 5) -> list:
+    """
+    获取个股最新新闻和公告摘要
+    
+    Args:
+        symbol: 股票代码
+        limit: 获取条数
+        
+    Returns:
+        list: 包含新闻标题和摘要的列表
+    """
+    try:
+        df = ak.stock_news_em(symbol=symbol)
+        if df.empty:
+            return []
+        
+        # 只取前 limit 条
+        df = df.head(limit)
+        
+        news_list = []
+        for _, row in df.iterrows():
+            news_list.append({
+                'title': row['新闻标题'],
+                'content': row['新闻内容'],
+                'date': row['发布时间']
+            })
+        return news_list
+    except Exception as e:
+        logger.warning(f"获取 {symbol} 新闻失败: {e}")
+        return []
+
+
 if __name__ == "__main__":
     # 简单测试
     print("测试获取A股列表...")

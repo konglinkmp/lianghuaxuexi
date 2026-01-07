@@ -327,7 +327,7 @@ class StockClassifier:
         Returns:
             DataFrame: 带有分类结果的股票池
         """
-        from .data_fetcher import get_stock_daily_history
+        from ..core.data_fetcher import get_stock_daily_history
         
         results = []
         total = len(stock_pool)

@@ -98,7 +98,7 @@ def update_market_regime(sentiment: float = 0.0, small_cap_risk_override: bool =
 
 
 def run_auction_filter(plan_df=None, input_file: str = OUTPUT_CSV,
-                       output_file: str = "data/trading_plan_auction.csv"):
+                       output_file: str = "data/reports/trading_plan_auction.csv"):
     try:
         import akshare as ak
     except Exception as exc:
@@ -130,8 +130,8 @@ def main():
     parser = argparse.ArgumentParser(description='A股量化交易决策辅助工具')
     parser.add_argument('--custom', action='store_true', 
                         help='使用自定义股票池')
-    parser.add_argument('--file', type=str, default='data/myshare.txt',
-                        help='自定义股票池文件路径（默认: data/myshare.txt）')
+    parser.add_argument('--file', type=str, default='data/raw/myshare.txt',
+                        help='自定义股票池文件路径（默认: data/raw/myshare.txt）')
     parser.add_argument('--limit', type=int, default=0,
                         help='限制分析股票数量（0表示不限制，用于测试）')
     parser.add_argument('--skip-risk-check', action='store_true',
@@ -146,7 +146,7 @@ def main():
                         help='仅执行竞价过滤，不重新生成计划')
     parser.add_argument('--auction-input', type=str, default=OUTPUT_CSV,
                         help='竞价过滤输入计划文件路径')
-    parser.add_argument('--auction-output', type=str, default='data/trading_plan_auction.csv',
+    parser.add_argument('--auction-output', type=str, default='data/reports/trading_plan_auction.csv',
                         help='竞价过滤输出文件路径')
     parser.add_argument('--sentiment', type=float, default=0.0,
                         help='专家情绪因子 (-1.0 到 1.0)')
@@ -156,7 +156,7 @@ def main():
     args = parser.parse_args()
     
     # Step 0: 自动分析专家见解 (如果存在)
-    expert_file = "data/expert_opinion.txt"
+    expert_file = "data/raw/expert_opinion.txt"
     ai_sentiment = 0.0
     small_cap_risk_from_ai = False
     expert_summary = ""

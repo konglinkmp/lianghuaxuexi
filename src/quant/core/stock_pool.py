@@ -127,7 +127,7 @@ def filter_by_turnover(df: pd.DataFrame, min_avg_amount: float = 5000_0000) -> p
 # 主力资金控盘现在作为正向加分项，在 stock_classifier.py 中处理
 
 
-def load_custom_pool(filepath: str = "data/myshare.txt") -> list:
+def load_custom_pool(filepath: str = "data/raw/myshare.txt") -> list:
     """
     加载自定义股票池文件
     
@@ -162,7 +162,7 @@ def load_custom_pool(filepath: str = "data/myshare.txt") -> list:
     return stocks
 
 
-def get_final_pool(use_custom: bool = False, custom_file: str = "data/myshare.txt",
+def get_final_pool(use_custom: bool = False, custom_file: str = "data/raw/myshare.txt",
                    skip_new_stock_filter: bool = True) -> pd.DataFrame:
     """
     获取最终的待分析股票池

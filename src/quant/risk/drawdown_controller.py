@@ -59,7 +59,7 @@ class DrawdownController:
         self,
         max_drawdown: float = MAX_DRAWDOWN_HARD,
         initial_capital: float = TOTAL_CAPITAL,
-        state_file: str = "data/drawdown_state.json",
+        state_file: str = "data/runtime/drawdown_state.json",
         reduce_level_1: float = DRAWDOWN_REDUCE_LEVEL_1,
         reduce_level_2: float = DRAWDOWN_REDUCE_LEVEL_2,
         reduce_target_l1: float = DRAWDOWN_REDUCE_TARGET_L1,

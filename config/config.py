@@ -95,12 +95,12 @@ SECTOR_STRENGTH_REQUIRE_EXCESS = True
 SECTOR_STRENGTH_REQUIRE_BOTH = True
 SECTOR_STRENGTH_APPLY_LAYERS = "aggressive"  # aggressive / all
 SECTOR_STRENGTH_ALLOW_NO_CONCEPT = True
-SECTOR_STRENGTH_CACHE_FILE = "data/sector_strength.json"
+SECTOR_STRENGTH_CACHE_FILE = "data/processed/sector_strength.json"
 
 # 概念强度榜单输出
 ENABLE_CONCEPT_STRENGTH_REPORT = True
 CONCEPT_STRENGTH_TOP_N = 20
-CONCEPT_STRENGTH_OUTPUT_FILE = "data/concept_strength.csv"
+CONCEPT_STRENGTH_OUTPUT_FILE = "data/reports/concept_strength.csv"
 
 # ============ 数据配置 ============
 # 历史数据获取天数（需足够计算均线）
@@ -111,7 +111,7 @@ NEW_STOCK_DAYS = 365  # 1年
 
 # ============ 输出配置 ============
 # CSV输出文件名
-OUTPUT_CSV = "data/trading_plan.csv"
+OUTPUT_CSV = "data/reports/trading_plan.csv"
 
 # ============ 指数代码 ============
 # 沪深300指数代码
@@ -125,7 +125,7 @@ MAX_POSITIONS = 10
 MAX_SECTOR_POSITIONS = 3
 
 # 持仓记录文件
-POSITION_FILE = "data/positions.json"
+POSITION_FILE = "data/runtime/positions.json"
 
 # ============ 基本面筛选 ============
 # 最大市盈率（剔除过高估值）
@@ -172,10 +172,10 @@ AGGRESSIVE_POSITION_RATIO = 0.08   # 激进层单只仓位比例
 AGGRESSIVE_MAX_HOLDING_DAYS = 10   # 激进层最大持仓天数
 
 # 热门概念配置文件
-HOT_CONCEPTS_FILE = "data/hot_concepts.txt"
+HOT_CONCEPTS_FILE = "data/processed/hot_concepts.txt"
 
 # ============ 数据库配置 ============
-DB_PATH = "data/stock_data.db"
+DB_PATH = "data/storage/stock_data.db"
 
 # ============ MACD技术指标配置 ============
 MACD_FAST_PERIOD = 12         # 快线周期

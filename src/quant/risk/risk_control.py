@@ -11,7 +11,7 @@ from config.config import ENABLE_DRAWDOWN_CONTROL
 from .drawdown_controller import RiskControlState, drawdown_controller
 
 
-ACCOUNT_STATUS_FILE = "data/account_status.json"
+ACCOUNT_STATUS_FILE = "data/runtime/account_status.json"
 
 
 def load_account_status(filepath: str = ACCOUNT_STATUS_FILE) -> Optional[dict]:

@@ -14,6 +14,8 @@ from .stock_classifier import (
     LAYER_CONSERVATIVE,
 )
 from .news_risk_analyzer import news_risk_analyzer
+from ..analysis.style_monitor import style_monitor
+from ..analysis.intraday_monitor import intraday_monitor
 import json
 import os
 from ..trade.position_tracker import position_tracker
@@ -177,6 +179,24 @@ class LayerStrategy:
             self.aggressive_count = 0
             if verbose:
                 print(f"[模式] 忽略持仓，使用默认资金配置: ¥{self.total_capital:,.2f}")
+
+        # ============ 风格漂移监控 (v2.1) ============
+        style_result = style_monitor.check_style_drift()
+        if style_result['is_defensive']:
+            # 动态调整稳健层权重
+            new_conservative_ratio = style_result['conservative_ratio']
+            new_aggressive_ratio = 1.0 - new_conservative_ratio
+            
+            # 重新计算资金分配
+            self.conservative_capital = self.total_capital * new_conservative_ratio
+            self.aggressive_capital = self.total_capital * new_aggressive_ratio
+            
+            if verbose:
+                print(f"\n[风格监控] 🛡️ 触发防守模式: {style_result['reason']}")
+                print(f"   调整权重: 稳健层 {new_conservative_ratio*100:.0f}% | 激进层 {new_aggressive_ratio*100:.0f}%")
+        else:
+            if verbose:
+                print(f"\n[风格监控] ⚖️ 市场风格正常: {style_result['reason']}")
 
         if risk_state is None:
             risk_state = get_risk_control_state(self.total_capital)
@@ -344,6 +364,12 @@ class LayerStrategy:
                     suggested_buy_price = round(ma5 * (1 + PULLBACK_DEVIATION_THRESHOLD/2), 2)
                     buy_note = f"⚠️ 当前偏离5日线{pullback_deviation*100:.1f}%，建议回踩至{suggested_buy_price}附近接回"
                 
+                # 检查 14:00 效应
+                dive_result = intraday_monitor.check_1400_dive(code)
+                if dive_result['has_dive']:
+                    dive_warning = f"⚠️ {dive_result['warning']}"
+                    buy_note = f"{buy_note}; {dive_warning}" if buy_note else dive_warning
+
                 signal = {
                     '代码': code,
                     '名称': name,

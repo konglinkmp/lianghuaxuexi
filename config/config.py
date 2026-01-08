@@ -200,3 +200,23 @@ PULLBACK_MA_PERIOD = 5
 
 # 价格偏离5日线比例阈值（超过此比例视为追高，建议等待回踩）
 PULLBACK_DEVIATION_THRESHOLD = 0.02  # 2%
+
+# ============ 组合风控参数 (v2.0) ============
+# 单一行业最大持仓市值比例（占总资产）
+MAX_INDUSTRY_POSITION_RATIO = 0.30  # 30%
+
+# 持仓相关性风控
+MAX_CORRELATION_THRESHOLD = 0.70    # 平均相关系数阈值
+CORRELATION_LOOKBACK_DAYS = 60      # 计算相关性的回溯天数
+
+# ============ 风格漂移监控参数 (v2.1) ============
+RPS_LOOKBACK_DAYS = 20              # RPS计算回溯天数
+STYLE_SWITCH_THRESHOLD = 0.1        # 风格切换阈值 (RPS差值 > 0.1 视为大盘占优)
+MAX_CONSERVATIVE_RATIO = 0.8        # 防守模式下稳健层最大比例
+
+# ============ 交易执行增强参数 (v2.2) ============
+AUCTION_WITHDRAWAL_LIMIT = 0.3      # 竞价撤单率阈值 (预留)
+INTRADAY_DIVE_THRESHOLD = -0.02     # 尾盘跳水阈值 (-2%)
+
+
+

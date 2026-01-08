@@ -43,7 +43,7 @@ def get_risk_control_state(total_capital: float, filepath: str = ACCOUNT_STATUS_
             reasons=["未提供账户净值，回撤控制未启用"],
         )
 
-    current_capital = status.get("current_capital", total_capital)
+    current_capital = status.get("total_assets", total_capital)
     as_of_raw = status.get("as_of")
     as_of = None
     if as_of_raw:

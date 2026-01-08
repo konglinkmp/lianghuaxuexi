@@ -33,6 +33,8 @@ from config.config import (
 from ..trade.position_tracker import position_tracker, portfolio_manager
 from .layer_strategy import LayerStrategy, LAYER_AGGRESSIVE, LAYER_CONSERVATIVE
 from .news_risk_analyzer import news_risk_analyzer
+from ..risk.portfolio_risk import portfolio_risk_manager
+
 
 
 def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
@@ -75,6 +77,11 @@ def generate_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
             risk_state=risk_state,
             strength_filter=strength_filter,
         )
+
+    # ============ 组合风控检查 (v2.0) ============
+    if not plan_df.empty:
+        plan_df = _apply_portfolio_risk_checks(plan_df, verbose)
+
 
     plan_df = _attach_style_weights(plan_df)
     
@@ -134,6 +141,55 @@ def _generate_layer_trading_plan(stock_pool: pd.DataFrame, verbose: bool = True,
     
     # 格式化为DataFrame
     return strategy.format_layer_plans(layer_signals)
+
+
+def _apply_portfolio_risk_checks(plan_df: pd.DataFrame, verbose: bool = True) -> pd.DataFrame:
+    """
+    应用组合风控检查（行业集中度 + 相关性）
+    """
+    if plan_df.empty:
+        return plan_df
+        
+    # 获取当前持仓
+    current_positions = position_tracker.get_positions()
+    
+    # 转换计划为列表格式供检查
+    planned_buys = plan_df.to_dict('records')
+    
+    # 1. 检查行业集中度
+    passed, reason, rejected_codes = portfolio_risk_manager.check_industry_concentration(
+        current_positions, planned_buys
+    )
+    
+    if not passed:
+        if verbose:
+            print(f"\n[组合风控] ⚠️ 触发行业集中度限制: {reason}")
+            print(f"   剔除以下股票: {rejected_codes}")
+        
+        # 剔除被拒绝的股票
+        plan_df = plan_df[~plan_df['代码'].isin(rejected_codes)]
+        
+    if plan_df.empty:
+        return plan_df
+        
+    # 2. 检查相关性风险
+    # 获取当前持仓代码
+    current_codes = list(current_positions.keys())
+    planned_codes = plan_df['代码'].tolist()
+    
+    passed, warning, avg_corr = portfolio_risk_manager.check_correlation_risk(
+        current_codes, planned_codes
+    )
+    
+    if not passed:
+        if verbose:
+            print(f"\n[组合风控] ⚠️ 触发相关性预警: {warning}")
+            print("   建议减少同类板块配置")
+        # 相关性目前仅做预警，不强制剔除，或者可以在这里做更复杂的处理
+        # 比如在报告中添加警告标记
+        plan_df.attrs['correlation_warning'] = warning
+        
+    return plan_df
 
 
 def _generate_single_layer_plan(stock_pool: pd.DataFrame, verbose: bool = True,

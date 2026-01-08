@@ -244,17 +244,39 @@ class LayerStrategy:
             code = row['代码']
             name = row['名称']
             
-            if verbose and (idx + 1) % 50 == 0:
+            if verbose and (idx + 1) % 100 == 0:
                 print(f"[分层进度] {idx + 1}/{total} ({(idx+1)/total*100:.1f}%)")
             
             try:
-                # 获取历史数据
-                df = get_stock_daily_history(code)
-                if df is None or df.empty or len(df) < 25:
-                    continue
-                
                 # 过滤已持仓
                 if code in self.held_stocks:
+                    continue
+                
+                # ============ 早期过滤（使用缓存数据，避免昂贵的API调用）============
+                # 从预加载的缓存中获取实时数据进行初步筛选
+                from ..core.data_fetcher import _stock_spot_cache
+                spot_data = _stock_spot_cache.get(code, {})
+                
+                # 快速过滤：换手率太低的股票不太可能是热门资金股
+                # PE 太高且换手率低的股票也不太可能符合条件
+                turnover = spot_data.get('换手率')
+                pe = spot_data.get('市盈率-动态')
+                
+                # 如果有缓存数据，进行初步筛选
+                if spot_data:
+                    try:
+                        turnover_val = float(turnover) if turnover and turnover != '-' else 0
+                        pe_val = float(pe) if pe and pe != '-' else None
+                        
+                        # 换手率 < 0.5% 且 PE 为负或极高(>200) 的股票：基本不可能符合任一层条件
+                        if turnover_val < 0.5 and (pe_val is None or pe_val < 0 or pe_val > 200):
+                            continue
+                    except (ValueError, TypeError):
+                        pass
+                
+                # 获取历史数据（这是最耗时的步骤）
+                df = get_stock_daily_history(code)
+                if df is None or df.empty or len(df) < 25:
                     continue
                 
                 # 分类股票

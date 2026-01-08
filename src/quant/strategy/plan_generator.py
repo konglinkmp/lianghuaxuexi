@@ -151,7 +151,7 @@ def _apply_portfolio_risk_checks(plan_df: pd.DataFrame, verbose: bool = True) ->
         return plan_df
         
     # 获取当前持仓
-    current_positions = position_tracker.get_positions()
+    current_positions = position_tracker.get_all_positions()
     
     # 转换计划为列表格式供检查
     planned_buys = plan_df.to_dict('records')
@@ -529,10 +529,14 @@ def save_trading_plan(plan_df: pd.DataFrame, filepath: str = OUTPUT_CSV):
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
         
+        # 保存 CSV 计划
+        plan_df.to_csv(filepath, index=False, encoding='utf-8-sig')
+        
         # 保存 Markdown 报告
         md_path = filepath.replace('.csv', '.md') if filepath.endswith('.csv') else filepath
         save_markdown_report(plan_df, md_path)
         print(f"\n[信息] 详细交易报告已保存至: {md_path}")
+        print(f"[信息] CSV 交易计划已保存至: {filepath}")
         
     except Exception as e:
         print(f"\n[错误] 保存计划失败: {e}")

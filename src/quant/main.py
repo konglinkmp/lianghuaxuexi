@@ -21,7 +21,7 @@ from .core.stock_pool import get_final_pool
 from .strategy.strategy import check_market_risk
 from .strategy.plan_generator import generate_trading_plan, print_trading_plan, save_trading_plan
 from .analysis.market_regime import adaptive_strategy
-from .core.data_fetcher import get_index_daily_history
+from .core.data_fetcher import get_index_daily_history, preload_stock_spot_data
 from config.config import (
     TOTAL_CAPITAL,
     OUTPUT_CSV,
@@ -181,6 +181,9 @@ def main():
 
     # 打印头部
     print_header()
+    
+    # Step 0.5: 预加载股票数据缓存（性能优化）
+    preload_stock_spot_data()
 
     # Step 1: 检查大盘风险
     if not args.skip_risk_check:

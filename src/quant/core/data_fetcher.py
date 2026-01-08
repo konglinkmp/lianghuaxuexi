@@ -271,6 +271,37 @@ _individual_info_cache = {}
 _stock_spot_cache = {}
 _market_cap_cache = {}
 
+# 预加载状态标记
+_spot_data_preloaded = False
+
+
+def preload_stock_spot_data():
+    """
+    预加载全A股实时数据到缓存，供后续查询 PE/PB/换手率等使用。
+    应在主流程开始时调用一次。
+    """
+    global _stock_spot_cache, _market_cap_cache, _spot_data_preloaded
+    
+    if _spot_data_preloaded:
+        return
+    
+    try:
+        logger.info("正在预加载全A股实时数据...")
+        df = ak.stock_zh_a_spot_em()
+        if df is not None and not df.empty:
+            _stock_spot_cache = df.set_index('代码').to_dict('index')
+            for code, data in _stock_spot_cache.items():
+                cap = data.get('总市值')
+                if cap is not None and cap != '-':
+                    try:
+                        _market_cap_cache[code] = float(cap)
+                    except (TypeError, ValueError):
+                        pass
+            _spot_data_preloaded = True
+            logger.info(f"预加载完成，共缓存 {len(_stock_spot_cache)} 只股票数据")
+    except Exception as e:
+        logger.warning(f"预加载股票数据失败: {e}")
+
 
 @retry(max_attempts=2, delay=0.5)
 def get_stock_individual_info(symbol: str) -> dict:

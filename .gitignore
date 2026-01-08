@@ -153,4 +153,8 @@ cython_debug/
 .cursor
 .github
 
-/data
+/# Quantitative Trading Data
+data/runtime/
+data/storage/
+data/processed/
+data/reports/

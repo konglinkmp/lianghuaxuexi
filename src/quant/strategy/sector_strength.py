@@ -229,7 +229,17 @@ def _calc_strength_ranking(
     return df
 
 
+# 板块历史数据内存缓存（避免同一运行中重复请求）
+_board_history_cache = {}
+
+
 def _fetch_board_history(kind: str, name: str) -> Optional[pd.DataFrame]:
+    global _board_history_cache
+    
+    cache_key = f"{kind}_{name}"
+    if cache_key in _board_history_cache:
+        return _board_history_cache[cache_key]
+    
     try:
         import akshare as ak
     except Exception:
@@ -237,12 +247,17 @@ def _fetch_board_history(kind: str, name: str) -> Optional[pd.DataFrame]:
 
     try:
         if kind == "industry":
-            return ak.stock_board_industry_hist_em(symbol=name)
-        if kind == "concept":
-            return ak.stock_board_concept_hist_em(symbol=name)
+            result = ak.stock_board_industry_hist_em(symbol=name)
+        elif kind == "concept":
+            result = ak.stock_board_concept_hist_em(symbol=name)
+        else:
+            result = None
+        
+        _board_history_cache[cache_key] = result
+        return result
     except Exception:
+        _board_history_cache[cache_key] = None
         return None
-    return None
 
 
 def _extract_close(df: pd.DataFrame) -> Optional[pd.Series]:

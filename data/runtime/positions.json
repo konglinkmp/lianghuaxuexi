@@ -1,0 +1,59 @@
+{
+  "159813": {
+    "name": "半导体ETF",
+    "entry_price": 1.083,
+    "shares": 10000,
+    "entry_date": "2026-01-01 09:30:00",
+    "stop_loss": 1.176,
+    "take_profit": 1.35,
+    "highest_price": 1.222,
+    "current_price": 1.222,
+    "sector": "半导体",
+    "status": "holding"
+  },
+  "588760": {
+    "name": "科创人工智能ETF",
+    "entry_price": 0.677,
+    "shares": 5000,
+    "entry_date": "2026-01-01 09:30:00",
+    "stop_loss": 0.781,
+    "take_profit": 0.9,
+    "highest_price": 0.803,
+    "current_price": 0.803,
+    "sector": "人工智能",
+    "status": "holding"
+  },
+  "000547": {
+    "name": "航天发展",
+    "entry_price": 31.699,
+    "shares": 200,
+    "entry_date": "2026-01-01 09:30:00",
+    "stop_loss": 34.72,
+    "take_profit": 40.0,
+    "highest_price": 37.0,
+    "current_price": 36.72,
+    "sector": "军工",
+    "status": "holding"
+  },
+  "588060": {
+    "name": "科创50ETF广发",
+    "entry_price": 0.884,
+    "shares": 0,
+    "entry_date": "2026-01-01 09:30:00",
+    "exit_price": 0.918,
+    "exit_date": "2026-01-07 14:25:00",
+    "status": "closed"
+  },
+  "601336": {
+    "name": "新华保险",
+    "entry_price": 79.471,
+    "shares": 100,
+    "entry_date": "2026-01-06 09:30:00",
+    "stop_loss": 78.23,
+    "take_profit": 91.4,
+    "highest_price": 83.69,
+    "current_price": 82.46,
+    "sector": "保险",
+    "status": "holding"
+  }
+}

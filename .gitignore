@@ -149,12 +149,12 @@ cython_debug/
 .DS_Store
 
 # Agent
-.agent
-.cursor
-.github
+# .agent
+# .cursor
+# .github
 
 /# Quantitative Trading Data
-data/runtime/
-data/storage/
-data/processed/
-data/reports/
+# data/runtime/
+# data/storage/
+# data/processed/
+# data/reports/

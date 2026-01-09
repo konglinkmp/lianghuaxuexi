@@ -19,8 +19,8 @@
 
 ```bash
 # 1. 克隆代码仓库
-git clone <your-repo-url> ~/workspace/量化
-cd ~/workspace/量化
+git clone <your-repo-url> ~/workspace/quant
+cd ~/workspace/quant
 
 # 2. 创建虚拟环境（推荐 Python 3.11+）
 python3 -m venv venv

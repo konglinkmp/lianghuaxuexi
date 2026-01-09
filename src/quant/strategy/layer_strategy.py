@@ -288,6 +288,16 @@ class LayerStrategy:
                 if layer not in [LAYER_AGGRESSIVE, LAYER_CONSERVATIVE]:
                     continue
 
+                # 获取行业信息
+                industry = get_stock_industry(code)
+
+                # ============ 行业黑名单过滤 (v3.0) ============
+                # 排除房地产及夕阳产业标的
+                if industry and ('房地产' in industry or '银行' in industry):
+                    if verbose:
+                        print(f"[行业过滤] {name}({code}) 属于排除行业({industry})，已跳过")
+                    continue
+
                 if layer == LAYER_AGGRESSIVE and aggressive_signals_count >= AGGRESSIVE_MAX_POSITIONS:
                     continue
                 if layer == LAYER_CONSERVATIVE and conservative_signals_count >= CONSERVATIVE_MAX_POSITIONS:
@@ -297,8 +307,6 @@ class LayerStrategy:
                 latest = df.iloc[-1]
                 close_price = latest['close']
                 
-                # 获取行业信息
-                industry = get_stock_industry(code)
                 concepts = get_stock_concepts(code)
                 industry_ok = concept_ok = False
                 strength_label = ""

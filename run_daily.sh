@@ -5,14 +5,20 @@
 # =================================================================
 
 # 1. 获取脚本所在目录的绝对路径
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # 2. 配置日志文件
-LOG_FILE="$SCRIPT_DIR/logs/daily_run.log"
-mkdir -p "$SCRIPT_DIR/logs"
+LOGS_DIR="$SCRIPT_DIR/logs"
+LOG_FILE="$LOGS_DIR/daily_run.log"
 
-# 每次运行前清理旧日志
+# 确保日志目录存在
+if [ ! -d "$LOGS_DIR" ]; then
+    mkdir -p "$LOGS_DIR" || { echo "❌ 无法创建日志目录: $LOGS_DIR"; exit 1; }
+fi
+
+# 每次运行前清理旧日志并给用户反馈
+echo "📝 日志文件位置: $LOG_FILE"
 rm -f "$LOG_FILE"
 
 echo "--------------------------------------------------" >> "$LOG_FILE"
@@ -31,7 +37,7 @@ export PYTHONPATH="$SCRIPT_DIR/src"
 
 # 5. 执行主程序
 # --ignore-holdings: 忽略持仓，查看全量推荐
-python3 -m quant.main --ignore-holdings "$@" >> "$LOG_FILE" 2>&1
+python3 -m quant.main --custom --ignore-holdings "$@" >> "$LOG_FILE" 2>&1
 
 # 6. 检查执行结果
 if [ $? -eq 0 ]; then

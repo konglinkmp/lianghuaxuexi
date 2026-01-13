@@ -46,6 +46,7 @@ from config.config import (
     PULLBACK_MA_PERIOD,
     PULLBACK_DEVIATION_THRESHOLD,
     EXPERT_SENTIMENT_OVERRIDE,
+    POSITION_FILE,
 )
 
 
@@ -105,8 +106,8 @@ class LayerStrategy:
         self.aggressive_count = 0
         
         try:
-            if os.path.exists("data/positions.json"):
-                with open("data/positions.json", "r", encoding="utf-8") as f:
+            if os.path.exists(POSITION_FILE):
+                with open(POSITION_FILE, "r", encoding="utf-8") as f:
                     positions = json.load(f)
                     
                 for code, pos in positions.items():

@@ -6,8 +6,8 @@
 import os
 import pandas as pd
 from datetime import datetime, timedelta
-from .data_fetcher import get_all_a_stock_list, get_stock_info, get_stock_daily_history
-from config.config import NEW_STOCK_DAYS
+from config.config import NEW_STOCK_DAYS, EXCLUDED_INDUSTRIES
+from .data_fetcher import get_all_a_stock_list, get_stock_info, get_stock_daily_history, get_stock_industry
 
 
 def filter_st_stocks(df: pd.DataFrame) -> pd.DataFrame:
@@ -162,6 +162,41 @@ def load_custom_pool(filepath: str = "data/raw/myshare.txt") -> list:
     return stocks
 
 
+def filter_by_industry(df: pd.DataFrame, excluded_industries: list = EXCLUDED_INDUSTRIES) -> pd.DataFrame:
+    """
+    剔除指定行业的股票
+    
+    Args:
+        df: 包含 '代码' 列的DataFrame
+        excluded_industries: 剔除的行业列表
+        
+    Returns:
+        过滤后的DataFrame
+    """
+    if not excluded_industries:
+        return df
+        
+    print(f"[信息] 正在按行业过滤 (剔除: {', '.join(excluded_industries)})...")
+    valid_stocks = []
+    total = len(df)
+    
+    for i, (_, row) in enumerate(df.iterrows(), 1):
+        code = row['代码']
+        try:
+            industry = get_stock_industry(code)
+            if not any(excl in industry for excl in excluded_industries):
+                valid_stocks.append(code)
+        except Exception:
+            # 获取行业失败的股票暂时保留，或者根据策略决定是否保留
+            valid_stocks.append(code)
+            
+        if i % 100 == 0:
+            print(f"[进度] 行业过滤 {i}/{total}", end='\r')
+            
+    print(f"\n[信息] 行业过滤完成，剩余 {len(valid_stocks)}/{total}")
+    return df[df['代码'].isin(valid_stocks)].copy()
+
+
 def get_final_pool(use_custom: bool = False, custom_file: str = "data/raw/myshare.txt",
                    skip_new_stock_filter: bool = True) -> pd.DataFrame:
     """
@@ -230,7 +265,10 @@ def get_final_pool(use_custom: bool = False, custom_file: str = "data/raw/myshar
         df = filter_by_market_cap(df)
         print(f"[信息] 剔除小市值后剩余 {len(df)} 只股票")
         
-        # 剔除低流动性（非常慢，建议只在生成最终计划时使用，或者在本地有全量数据时使用）
+        # 剔除指定行业
+        df = filter_by_industry(df)
+        
+        # 剔除低流动性
         # df = filter_by_turnover(df)
         
         return df.reset_index(drop=True)

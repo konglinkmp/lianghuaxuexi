@@ -37,7 +37,7 @@ export PYTHONPATH="$SCRIPT_DIR/src"
 
 # 5. 执行主程序
 # --ignore-holdings: 忽略持仓，查看全量推荐
-python3 -m quant.main --custom --ignore-holdings "$@" >> "$LOG_FILE" 2>&1
+python3 -m quant.main --custom "$@" >> "$LOG_FILE" 2>&1
 
 # 6. 检查执行结果
 if [ $? -eq 0 ]; then
